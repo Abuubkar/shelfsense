@@ -1,0 +1,24 @@
+[project]
+name = "shelfsense"
+version = "0.1.0"
+description = "Workspace root: dev tooling and scripts. App code lives in apps/."
+requires-python = ">=3.13"
+dependencies = ["shelfsense-api"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/api"]
+
+[tool.uv.sources]
+shelfsense-api = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/tests"]
+addopts = "--strict-markers"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

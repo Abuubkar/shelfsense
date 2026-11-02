@@ -1,0 +1,21 @@
+services:
+  postgres:
+    # Postgres 18 with pgvector 0.8.7 (docs/adr/0001).
+    image: pgvector/pgvector:0.8.7-pg18-trixie
+    environment:
+      POSTGRES_USER: shelfsense
+      POSTGRES_PASSWORD: shelfsense
+      POSTGRES_DB: shelfsense
+    ports:
+      - "5436:5432"  # 5434 is Ledgerline's Postgres, 5435 Pagerwise's
+    volumes:
+      # Postgres 18 images keep PGDATA under /var/lib/postgresql/18/; mount the parent, not .../data.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shelfsense -d shelfsense"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
