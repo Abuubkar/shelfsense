@@ -1,33 +1,149 @@
 """What the API does, independent of REST or GraphQL: both call these functions, so no business rule is written
 twice. Errors are raised as ApiProblem."""
 
+import math
+import tempfile
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from botocore.exceptions import BotoCoreError, ClientError
 from opensearchpy import AsyncOpenSearch
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api import cursor, feeds, schemas, search
-from shelfsense_api.classify import classify_product
-from shelfsense_api.db import Feed, FeedRejection, Product, ProductCategory, Supplier, TaxonomyNode
+from shelfsense_api import aws, cursor, feeds, schemas, search
+from shelfsense_api.classify import classify_product, needs_enrichment
+from shelfsense_api.db import (
+    DeadLetter,
+    EnrichmentRun,
+    Feed,
+    FeedRejection,
+    Product,
+    ProductCategory,
+    Supplier,
+    TaxonomyNode,
+)
 from shelfsense_api.llm import ModelError
+from shelfsense_api.messages import EnrichRequest, IndexRequest
 from shelfsense_api.schemas import ApiProblem, ProblemCode
 from shelfsense_api.settings import settings
 
 
-async def import_feed(session: AsyncSession, path: str, supplier: str) -> schemas.ImportResult:
-    feeds_dir = Path(settings.feeds_dir).resolve()
-    file = (feeds_dir / path).resolve()
-    if not file.is_relative_to(feeds_dir) or not file.is_file():
-        raise ApiProblem(404, ProblemCode.NOT_FOUND, "Feed file not found", f"no file {path!r} under {settings.feeds_dir}")
-    result = await feeds.import_file(session, file, supplier)
+@contextmanager
+def _aws_errors() -> Iterator[None]:
+    """SQS or S3 unreachable or refusing: a 503 for the client to retry, not a 500."""
+    try:
+        yield
+    except (BotoCoreError, ClientError) as exc:
+        raise ApiProblem(503, ProblemCode.QUEUE_UNAVAILABLE, "Queues or storage unavailable", str(exc)) from exc
+
+
+def _feed_key(feed_id: uuid.UUID) -> str:
+    return f"{feed_id}.csv"
+
+
+async def create_feed_upload(session: AsyncSession, supplier: str, file_name: str) -> schemas.FeedUpload:
+    feed = Feed(supplier_id=await feeds.ensure_supplier(session, supplier), file_name=file_name)
+    session.add(feed)
+    await session.commit()
+    with _aws_errors():
+        async with aws.s3() as s3:
+            url = await s3.generate_presigned_url("put_object", ExpiresIn=settings.feed_upload_expiry_s,
+                                                  Params={"Bucket": settings.feeds_bucket, "Key": _feed_key(feed.id)})
+    expires_at = datetime.now(UTC) + timedelta(seconds=settings.feed_upload_expiry_s)
+    return schemas.FeedUpload(feed_id=feed.id, upload_url=url, expires_at=expires_at)
+
+
+async def commit_feed(session: AsyncSession, feed_id: uuid.UUID) -> schemas.ImportResult:
+    """Import the uploaded file and queue its products that need enriching. Refused while the enrich backlog
+    is full. Safe to repeat: products upsert on their content hash and rejections on their row number, and the
+    queued products are those still not enriched, which workers skip if they finish first."""
+    feed = await session.get(Feed, feed_id)
+    if feed is None:
+        raise ApiProblem(404, ProblemCode.NOT_FOUND, "Feed not found")
+    with _aws_errors():
+        async with aws.sqs() as sqs, aws.s3() as s3:
+            await _check_backlog(session, sqs)
+            # Spooled to a temporary file, never held in memory: feeds can be hundreds of MB.
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "feed.csv"
+                try:
+                    obj = await s3.get_object(Bucket=settings.feeds_bucket, Key=_feed_key(feed_id))
+                except ClientError as exc:
+                    if exc.response["Error"]["Code"] != "NoSuchKey":
+                        raise
+                    raise ApiProblem(409, ProblemCode.FEED_NOT_UPLOADED, "Feed not uploaded",
+                                     "PUT the file to the feed's upload_url first") from None
+                with path.open("wb") as f:
+                    async for chunk in obj["Body"].iter_chunks(1 << 20):
+                        f.write(chunk)
+                result = await feeds.import_file(session, path, feed_id, feed.supplier_id)
+
+            to_enrich: list[uuid.UUID] = []
+            for start in range(0, len(result.product_ids), 5000):
+                to_enrich += await needs_enrichment(session, result.product_ids[start:start + 5000])
+            batch = settings.enrich_batch_size
+            await aws.send(sqs, settings.enrich_queue, [
+                EnrichRequest(product_ids=to_enrich[i:i + batch], feed_id=feed_id).model_dump_json()
+                for i in range(0, len(to_enrich), batch)
+            ])
     return schemas.ImportResult(
-        **{k: v for k, v in result.__dict__.items() if k != "rejections"},
+        **{k: v for k, v in result.__dict__.items() if k not in ("rejections", "product_ids")},
         rejected=len(result.rejections),
+        enqueued=len(to_enrich),
         rejections=[schemas.Rejection(**r.__dict__) for r in result.rejections],
     )
+
+
+async def _check_backlog(session: AsyncSession, sqs: Any) -> None:
+    """Backpressure: refuse new work while the enrich queue is over its limit, and say when to come back, from
+    how fast products were enriched over the last hour."""
+    depth = await aws.queue_depth(sqs, settings.enrich_queue)
+    if depth <= settings.max_enrich_backlog:
+        return
+    enriched_last_hour = await session.scalar(
+        select(func.count()).select_from(EnrichmentRun)
+        .where(EnrichmentRun.outcome == "enriched", EnrichmentRun.created_at > func.now() - timedelta(hours=1))
+    ) or 0
+    excess_products = (depth - settings.max_enrich_backlog) * settings.enrich_batch_size
+    # No recent enrichments (workers stopped?): a fixed 5 minutes rather than "never".
+    seconds = 300 if not enriched_last_hour else math.ceil(excess_products / (enriched_last_hour / 3600))
+    retry_after = min(max(seconds, 30), 3600)
+    raise ApiProblem(429, ProblemCode.BACKLOG_FULL, "Enrichment backlog is full",
+                     f"{depth} messages queued, limit {settings.max_enrich_backlog}; "
+                     f"{enriched_last_hour} products enriched in the last hour",
+                     headers={"Retry-After": str(retry_after)})
+
+
+async def redrive(session: AsyncSession, queue: schemas.WorkQueue, dry_run: bool) -> schemas.RedriveResult:
+    name = settings.enrich_queue if queue == schemas.WorkQueue.ENRICH else settings.index_queue
+    reasons = dict((await session.execute(
+        select(DeadLetter.error_code, func.count())
+        .where(DeadLetter.queue == name, DeadLetter.redriven_at.is_(None)).group_by(DeadLetter.error_code)
+    )).all())
+    task_handle = None
+    with _aws_errors():
+        async with aws.sqs() as sqs:
+            messages = await aws.queue_depth(sqs, aws.dlq_name(name))
+            if not dry_run:
+                try:
+                    task = await sqs.start_message_move_task(SourceArn=await aws.queue_arn(sqs, aws.dlq_name(name)),
+                                                             DestinationArn=await aws.queue_arn(sqs, name))
+                except ClientError as exc:
+                    if "already a task running" not in exc.response["Error"].get("Message", ""):
+                        raise
+                    raise ApiProblem(409, ProblemCode.REDRIVE_IN_PROGRESS, "A redrive is already running",
+                                     exc.response["Error"]["Message"]) from None
+                task_handle = task["TaskHandle"]
+                await session.execute(update(DeadLetter).where(DeadLetter.queue == name, DeadLetter.redriven_at.is_(None))
+                                      .values(redriven_at=func.now()))
+                await session.commit()
+    return schemas.RedriveResult(queue=queue, dry_run=dry_run, messages=messages, reasons=reasons,
+                                 task_handle=task_handle)
 
 
 async def list_rejections(session: AsyncSession, feed_id: uuid.UUID, limit: int,
@@ -114,6 +230,10 @@ async def enrich_product(session: AsyncSession, product_id: uuid.UUID) -> schema
         if exc.code == "model_timeout":
             raise ApiProblem(504, ProblemCode.MODEL_TIMEOUT, "The model timed out", str(exc)) from exc
         raise ApiProblem(502, ProblemCode.MODEL_UNAVAILABLE, "The model gave no usable reply", f"{exc.code}: {exc}") from exc
+    # Like the enrich worker: a new category reaches search through the index queue.
+    with _aws_errors():
+        async with aws.sqs() as sqs:
+            await aws.send(sqs, settings.index_queue, [IndexRequest(product_ids=[product_id]).model_dump_json()])
     return await get_product(session, product_id)
 
 
@@ -139,7 +259,7 @@ async def search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filter
     paths = dict((await session.execute(
         select(TaxonomyNode.node_id, TaxonomyNode.full_path)
         .where(TaxonomyNode.version == settings.taxonomy_version, TaxonomyNode.node_id.in_(category_ids))
-    )).tuples().all()) if category_ids else {}
+    )).all()) if category_ids else {}
     labels = {"category_id": {str(k): v for k, v in paths.items()},
               "price": {key: _price_label(lo, hi) for key, lo, hi in search.PRICE_BUCKETS}}
 

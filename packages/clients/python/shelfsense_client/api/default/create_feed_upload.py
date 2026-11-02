@@ -5,21 +5,21 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.import_local_request import ImportLocalRequest
-from ...models.import_result import ImportResult
+from ...models.feed_upload import FeedUpload
+from ...models.feed_upload_request import FeedUploadRequest
 from ...models.problem import Problem
 from ...types import Response
 
 
 def _get_kwargs(
     *,
-    body: ImportLocalRequest,
+    body: FeedUploadRequest,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
 
     _kwargs: dict[str, Any] = {
         "method": "post",
-        "url": "/v1/feeds:import-local",
+        "url": "/v1/feeds",
     }
 
     _kwargs["json"] = body.to_dict()
@@ -30,21 +30,21 @@ def _get_kwargs(
     return _kwargs
 
 
-def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> ImportResult | Problem | None:
-    if response.status_code == 200:
-        response_200 = ImportResult.from_dict(response.json())
+def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Response) -> FeedUpload | Problem | None:
+    if response.status_code == 201:
+        response_201 = FeedUpload.from_dict(response.json())
 
-        return response_200
+        return response_201
 
     if response.status_code == 400:
         response_400 = Problem.from_dict(response.json())
 
         return response_400
 
-    if response.status_code == 404:
-        response_404 = Problem.from_dict(response.json())
+    if response.status_code == 503:
+        response_503 = Problem.from_dict(response.json())
 
-        return response_404
+        return response_503
 
     if client.raise_on_unexpected_status:
         raise errors.UnexpectedStatus(response.status_code, response.content)
@@ -54,7 +54,7 @@ def _parse_response(*, client: AuthenticatedClient | Client, response: httpx.Res
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[ImportResult | Problem]:
+) -> Response[FeedUpload | Problem]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -66,23 +66,22 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
-    body: ImportLocalRequest,
-) -> Response[ImportResult | Problem]:
-    """Import a supplier feed CSV from the API's feed directory
+    body: FeedUploadRequest,
+) -> Response[FeedUpload | Problem]:
+    """Start a feed upload
 
-     Streams the CSV, validates each row, upserts valid rows on (supplier, SKU) only when their content
-    changed, and records invalid rows as rejections with their spreadsheet row number (header = row 1).
-    Importing the same file again changes nothing and returns the same feed.
+     Records a new feed and returns a presigned URL to `PUT` the CSV to object storage directly, so large
+    files never pass through the API. Then call `POST /v1/feeds/{feed_id}:commit`.
 
     Args:
-        body (ImportLocalRequest):
+        body (FeedUploadRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ImportResult | Problem]
+        Response[FeedUpload | Problem]
     """
 
     kwargs = _get_kwargs(
@@ -99,23 +98,22 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient | Client,
-    body: ImportLocalRequest,
-) -> ImportResult | Problem | None:
-    """Import a supplier feed CSV from the API's feed directory
+    body: FeedUploadRequest,
+) -> FeedUpload | Problem | None:
+    """Start a feed upload
 
-     Streams the CSV, validates each row, upserts valid rows on (supplier, SKU) only when their content
-    changed, and records invalid rows as rejections with their spreadsheet row number (header = row 1).
-    Importing the same file again changes nothing and returns the same feed.
+     Records a new feed and returns a presigned URL to `PUT` the CSV to object storage directly, so large
+    files never pass through the API. Then call `POST /v1/feeds/{feed_id}:commit`.
 
     Args:
-        body (ImportLocalRequest):
+        body (FeedUploadRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ImportResult | Problem
+        FeedUpload | Problem
     """
 
     return sync_detailed(
@@ -127,23 +125,22 @@ def sync(
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
-    body: ImportLocalRequest,
-) -> Response[ImportResult | Problem]:
-    """Import a supplier feed CSV from the API's feed directory
+    body: FeedUploadRequest,
+) -> Response[FeedUpload | Problem]:
+    """Start a feed upload
 
-     Streams the CSV, validates each row, upserts valid rows on (supplier, SKU) only when their content
-    changed, and records invalid rows as rejections with their spreadsheet row number (header = row 1).
-    Importing the same file again changes nothing and returns the same feed.
+     Records a new feed and returns a presigned URL to `PUT` the CSV to object storage directly, so large
+    files never pass through the API. Then call `POST /v1/feeds/{feed_id}:commit`.
 
     Args:
-        body (ImportLocalRequest):
+        body (FeedUploadRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[ImportResult | Problem]
+        Response[FeedUpload | Problem]
     """
 
     kwargs = _get_kwargs(
@@ -158,23 +155,22 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient | Client,
-    body: ImportLocalRequest,
-) -> ImportResult | Problem | None:
-    """Import a supplier feed CSV from the API's feed directory
+    body: FeedUploadRequest,
+) -> FeedUpload | Problem | None:
+    """Start a feed upload
 
-     Streams the CSV, validates each row, upserts valid rows on (supplier, SKU) only when their content
-    changed, and records invalid rows as rejections with their spreadsheet row number (header = row 1).
-    Importing the same file again changes nothing and returns the same feed.
+     Records a new feed and returns a presigned URL to `PUT` the CSV to object storage directly, so large
+    files never pass through the API. Then call `POST /v1/feeds/{feed_id}:commit`.
 
     Args:
-        body (ImportLocalRequest):
+        body (FeedUploadRequest):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        ImportResult | Problem
+        FeedUpload | Problem
     """
 
     return (
