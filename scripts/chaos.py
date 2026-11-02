@@ -238,7 +238,16 @@ async def cleanup(sqs: Any, s3: Any, os: AsyncOpenSearch, feed_id: Any) -> None:
     await os.delete_by_query(index="products", body={"query": {"term": {"supplier": SUPPLIER}}}, refresh=True)
     # Deleted documents stay in the HNSW graphs until their segments merge, and crowd live ones out of k-NN
     # results (docs/challenges.md): 2,000 deleted near-duplicates cut a radial search from 13 matches to 5.
-    await os.indices.forcemerge(index="products", only_expunge_deletes=True)
+    # Right after the delete, an expunge keeps them (they're still retained as recent soft deletes), so retry.
+    for _ in range(24):
+        await os.indices.forcemerge(index="products", only_expunge_deletes=True)
+        await os.indices.refresh(index="products")
+        stats = await os.indices.stats(index="products", metric="docs")
+        if stats["_all"]["primaries"]["docs"]["deleted"] == 0:
+            break
+        await asyncio.sleep(5)
+    else:
+        print("warning: deleted documents still in the index; k-NN recall stays low until segments merge")
     async with db.SessionLocal() as session:
         ids = select(Product.id).join(Supplier, Supplier.id == Product.supplier_id).where(Supplier.code == SUPPLIER)
         for model in (DeadLetter, EnrichmentRun, ProductCategory):
