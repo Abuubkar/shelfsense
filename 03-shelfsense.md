@@ -78,7 +78,8 @@ Each prompt is one vertical slice that runs end to end on real input. Your 8 top
 | 2 | Contracts | Faceted hybrid search with deep pagination behind a spec-first API, typed client, GraphQL search | OpenSearch, OpenAPI spec, Strawberry, testcontainers |
 | 3 | Workers | Feeds upload to S3 and enrich/index through queues with per-item failures, DLQs and backpressure | LocalStack (SQS, S3), Redis |
 | 4 | Data | Drifting supplier API import, realistic seeds, JSONB → typed columns, taxonomy version upgrade | supplier_mock, quirk-profile seeds |
-| 5 | AI (attributes + queries) + Tests (Jest) | Grounded attribute extraction, natural-language query parsing with fast path and fallback, search UI | Next.js, Jest |
+| 5a | AI (attributes + queries) | Grounded attribute extraction, natural-language query parsing with fast path, cache and fallback | Redis, qwen2.5:3b |
+| 5b | UI (prototypes) + Tests (Jest) | 3–4 search-UI concepts prototyped against the real API, then the chosen one built | Next.js, Jest |
 | 6 | AI (evals) | Golden set, enrichment/parse/search evals with nDCG, zero-downtime reindex judged by the eval | Eval harness, recorded responses |
 | 7 | CI/CD | GitHub Actions incl. a search performance smoke test; image build and push | Workflows, Dockerfiles, GHCR |
 | 8 | Instrumentation | One product traced from feed row to searchable; freshness and search SLOs | OpenTelemetry, Jaeger, Prometheus, Grafana |
@@ -190,26 +191,57 @@ Git: branch slice/04-data.
 Done when: seeds load (show row counts and rows/sec for the large profile); the drifting import is exact; both migrations run while a background loop keeps searching with 0 errors; the taxonomy upgrade remaps the synthetic changes correctly. Show the outputs.
 ```
 
-### Slice 5. AI attributes and query understanding + search UI (with Jest)
+### Slice 5a. AI attributes and query understanding (backend)
+
+Split from the original slice 5 (2026-11-02) so the UI can be prototyped on its own against a working API.
 
 ```text
-Slice 5 of 8 for Shelfsense: grounded attributes, query parsing and the search UI. Follow HOW_WE_BUILD.md.
+Slice 5a of 8 for Shelfsense: grounded attributes and query parsing. Follow HOW_WE_BUILD.md.
 
-Goal: enrichment also extracts typed attributes that are each backed by an exact quote from the product text, shoppers can type natural-language queries that become filters, and search stays fast and works even when the model is slow.
+Goal: enrichment also extracts typed attributes that are each backed by an exact quote from the product text,
+natural-language queries become filters, and search stays fast and works even when the model is slow.
 
 Build:
-- Enrichment schema grows: attributes [{name (enum), value, unit or null, evidence_field (title | description | brand_raw | raw_attributes), evidence_text}]. The system prompt carries the attribute glossary with allowed normalized values and 6 worked examples, including attributes that are absent. Keep it byte-identical across products so Ollama can reuse the processed prefix.
-- Grounding, in code: find evidence_text as an exact substring of the named field to get offsets; drop the attribute if it isn't there and count it as ungrounded; normalize values with slice 4's normalizers. Attributes are written to product_attributes and indexed as facets.
-- Query understanding: a rules fast path skips the model when the query has no price, size, colour, gender, material or negation signals. Otherwise call qwen2.5:3b-instruct (a smaller model from settings, because this path is user-facing) with structured output QueryParse {keywords, category_hint, filters {price_min, price_max, colors, exclude_colors, materials, exclude_materials, gender, size {system, value}}} inside a 2.5s timeout. On timeout or error, run plain hybrid search with parse_degraded=true. Cache parses in Redis on a normalized query key for 24h. Filters apply as hard filters, except price, which becomes a soft boost if it would return zero results. The search response reports query_parse.source (cache | rules | llm | degraded).
-- apps/web (Next.js + TypeScript): search box, facets, results with "load more" via the opaque cursor, a "showing broader results" notice when the parse degraded, and a debug panel with per-stage scores. Generated TS client (openapi-typescript + openapi-fetch) for search; GraphQL with @graphql-codegen for the product detail page.
-- Jest setup (next/jest, React Testing Library, MSW). Tests: selecting a facet updates the URL and the query; "load more" sends the cursor; the degraded notice appears; price formatting matches the Python fixtures.
-- Python unit tests: evidence offsets with unicode (emoji, combining accents), the fast-path detector, query-key normalization, the price soft-boost rule.
+- Enrichment schema grows: attributes [{name (enum), value, unit or null, evidence_field (title | description |
+  brand | raw_attributes), evidence_text}]. The system prompt carries the attribute glossary with allowed
+  normalized values and 6 worked examples, including absent attributes, byte-identical across products so Ollama
+  reuses the processed prefix.
+- Grounding in code: evidence_text must be an exact substring of the named field (offsets stored); otherwise the
+  attribute is dropped and counted as ungrounded. Values normalized with slice 4's normalizers. Stored in
+  product_extracted_attributes and indexed as facets.
+- Query understanding: a rules fast path skips the model when there are no price, size, colour, gender, material
+  or negation signals; otherwise qwen2.5:3b-instruct returns QueryParse {keywords, category_hint, filters} within
+  2.5 s. On timeout or error: plain hybrid search with parse_degraded. Parses cached in Redis for 24 h on a
+  normalized key. Filters are hard, except price, which is relaxed when it would return nothing. The search
+  response reports query_parse.source (cache | rules | llm | degraded).
+- Python unit tests: evidence offsets with unicode, the fast-path detector, query-key normalization, the price rule.
 
-Check current official docs (web search) for Ollama prompt/prefix reuse behaviour, Next.js App Router, openapi-typescript and openapi-fetch, graphql-codegen, Jest with next/jest, and MSW.
-Will ask before adding: next, react, openapi-typescript, openapi-fetch, a GraphQL client (with one line on why), @graphql-codegen/*, jest, @testing-library/react, msw; the product_attributes indexing change; the query_parse field in the search response.
-Git: branch slice/05-attributes-queries-ui.
+Done when: 20 products show extracted attributes with highlighted evidence and the ungrounded count; 10
+natural-language queries show their parse source, filters and results, including one forced timeout that
+degrades cleanly.
+```
 
-Done when: 20 products show extracted attributes with highlighted evidence, plus the ungrounded count; 10 natural-language queries show their parse source, filters and results, including one forced timeout that degrades cleanly; the UI works in the browser. Jest and pytest pass.
+### Slice 5b. Search UI: prototype concepts, then build one (with Jest)
+
+```text
+Slice 5b of 8 for Shelfsense: the storefront search UI. Follow HOW_WE_BUILD.md.
+
+Goal: pick the search experience by trying real alternatives, then build the chosen one properly.
+
+Build:
+- Prototypes first: 3–4 distinct, throwaway search-UI concepts against 5a's real API (for example: classic facet
+  sidebar; parsed query as editable filter chips; conversational refine; results with a "why this result" panel).
+  Each answers a stated design question; the user compares them in the browser and picks (or combines).
+- Then apps/web (Next.js + TypeScript) for the chosen concept: search box, facets, "load more" via the opaque
+  cursor, the degraded-parse notice, the debug panel. Generated TS client (openapi-typescript + openapi-fetch);
+  GraphQL with @graphql-codegen for the product detail page.
+- Jest (next/jest, React Testing Library, MSW): a facet updates the URL and query; "load more" sends the cursor;
+  the degraded notice appears; price formatting matches the Python fixtures.
+
+Will ask before adding: next, react, openapi-typescript, openapi-fetch, a GraphQL client, @graphql-codegen/*,
+jest, @testing-library/react, msw.
+
+Done when: the prototypes were compared and a choice recorded (ADR); the chosen UI works in the browser; Jest passes.
 ```
 
 ### Slice 6. AI evals: nDCG, golden set, zero-downtime reindex
