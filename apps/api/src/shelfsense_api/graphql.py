@@ -62,6 +62,11 @@ class Product:
     gtin: str | None
     price: Money
     attributes: list[Attribute]
+    color_base: str | None
+    material: str | None
+    gender: str | None
+    size_system: str | None
+    size_value: str | None
     category: Category | None
 
     @classmethod
@@ -71,6 +76,8 @@ class Product:
             id=p.id, supplier=p.supplier, supplier_sku=p.supplier_sku, title=p.title, description=p.description,
             brand=p.brand, gtin=p.gtin, price=Money.of(p.price),
             attributes=[Attribute(name=k, value=v) for k, v in sorted(p.attributes.items())],
+            color_base=p.color_base, material=p.material, gender=p.gender, size_system=p.size_system,
+            size_value=p.size_value,
             category=None if c is None else Category(
                 taxonomy_version=c.taxonomy_version, node_id=c.node_id, full_path=c.full_path,
                 confidence=c.confidence, model=c.model, prompt_version=c.prompt_version),

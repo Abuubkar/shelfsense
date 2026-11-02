@@ -12,13 +12,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import func, literal_column, select, update
+from sqlalchemy import delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api.db import Feed, FeedRejection, Product, Supplier
+from shelfsense_api.db import Feed, FeedRejection, Product, ProductAttribute, Supplier
+from shelfsense_api.normalize import typed_attributes
 
-# Columns with a place on the product; any other column is kept as-is in attributes_json.
+# Columns with a place on the product; any other column is kept as given in product_attributes.
 PRODUCT_COLUMNS = ("sku", "title", "description", "brand", "gtin", "price", "currency")
 GTIN_LENGTHS = (8, 12, 13, 14)
 UPSERT_BATCH = 500
@@ -196,7 +197,7 @@ async def _upsert(session: AsyncSession, supplier_id: Any, batch: list[FeedRow],
     rows = [
         {"supplier_id": supplier_id, "supplier_sku": r.sku, "title": r.title, "description": r.description,
          "brand": r.brand, "gtin": r.gtin, "price_minor": r.price_minor, "currency": r.currency,
-         "attributes_json": r.attributes, "content_hash": r.content_hash()}
+         "content_hash": r.content_hash(), **typed_attributes(r.attributes)}
         for r in batch
     ]
     stmt = insert(Product).values(rows)
@@ -205,11 +206,20 @@ async def _upsert(session: AsyncSession, supplier_id: Any, batch: list[FeedRow],
         index_elements=["supplier_id", "supplier_sku"],
         set_={**{k: stmt.excluded[k] for k in updatable}, "updated_at": literal_column("now()")},
         where=Product.content_hash != stmt.excluded.content_hash,
-    ).returning(literal_column("xmax = 0"))  # xmax is 0 on a freshly inserted row, set on an updated one
-    written = (await session.scalars(stmt)).all()
-    result.inserted += sum(written)
-    result.updated += len(written) - sum(written)
+    ).returning(Product.id, Product.supplier_sku, literal_column("xmax = 0"))  # xmax is 0 on a fresh insert
+    written = (await session.execute(stmt)).all()
+    inserted = sum(1 for *_, fresh in written if fresh)
+    result.inserted += inserted
+    result.updated += len(written) - inserted
     result.unchanged += len(batch) - len(written)
+    # Raw attributes of the products just written, replacing what an earlier import left.
+    if written:
+        by_sku = {r.sku: r for r in batch}
+        await session.execute(delete(ProductAttribute).where(ProductAttribute.product_id.in_([w[0] for w in written])))
+        attributes = [{"product_id": product_id, "name": name, "value": value}
+                      for product_id, sku, _ in written for name, value in by_sku[sku].attributes.items()]
+        if attributes:
+            await session.execute(insert(ProductAttribute).values(attributes))
     result.product_ids += await session.scalars(
         select(Product.id).where(Product.supplier_id == supplier_id, Product.supplier_sku.in_([r.sku for r in batch]))
     )

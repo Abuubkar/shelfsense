@@ -23,6 +23,7 @@ from shelfsense_api.db import (
     Feed,
     FeedRejection,
     Product,
+    ProductAttribute,
     ProductCategory,
     Supplier,
     TaxonomyNode,
@@ -164,9 +165,11 @@ async def list_rejections(session: AsyncSession, feed_id: uuid.UUID, limit: int,
 
 
 def _products() -> Select[Any]:
-    """Products with their supplier code and their category in the current taxonomy release."""
+    """Products with their supplier code, raw attributes, and category in the current taxonomy release."""
+    attributes = (select(func.jsonb_object_agg(ProductAttribute.name, ProductAttribute.value))
+                  .where(ProductAttribute.product_id == Product.id).scalar_subquery())
     return (
-        select(Product, Supplier.code, ProductCategory, TaxonomyNode.full_path)
+        select(Product, Supplier.code, ProductCategory, TaxonomyNode.full_path, attributes)
         .join(Supplier, Supplier.id == Product.supplier_id)
         .outerjoin(ProductCategory, (ProductCategory.product_id == Product.id)
                    & (ProductCategory.taxonomy_version == settings.taxonomy_version))
@@ -176,12 +179,13 @@ def _products() -> Select[Any]:
 
 
 def _product(row: Any) -> schemas.Product:
-    product, supplier, category, full_path = row
+    product, supplier, category, full_path, attributes = row
     return schemas.Product(
         id=product.id, supplier=supplier, supplier_sku=product.supplier_sku, title=product.title,
         description=product.description, brand=product.brand, gtin=product.gtin,
         price=schemas.Money(amount_minor=product.price_minor, currency=product.currency),
-        attributes=product.attributes_json,
+        attributes=attributes or {}, color_base=product.color_base, material=product.material,
+        gender=product.gender, size_system=product.size_system, size_value=product.size_value,
         category=None if category is None else schemas.Category(
             full_path=full_path, **{f: getattr(category, f) for f in schemas.Category.model_fields if f != "full_path"}
         ),

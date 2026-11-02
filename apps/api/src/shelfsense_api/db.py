@@ -1,7 +1,6 @@
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
 
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import (
@@ -63,12 +62,27 @@ class Product(Base):
     # Integer minor units (cents) plus ISO 4217 code: money never passes through a float.
     price_minor: Mapped[int] = mapped_column(BigInteger)
     currency: Mapped[str] = mapped_column(String(3))
-    # Supplier-provided extra columns as given. Becomes typed columns for the hottest facets in slice 4.
-    attributes_json: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    # The hottest facets, normalized (normalize.typed_attributes) from the supplier's raw attributes, which are
+    # kept as given in product_attributes. color_base is one of normalize.BASE_COLORS (a CHECK constraint).
+    color_base: Mapped[str | None] = mapped_column(String(16))
+    material: Mapped[str | None] = mapped_column(String(64))
+    gender: Mapped[str | None] = mapped_column(String(16))
+    size_system: Mapped[str | None] = mapped_column(String(8))
+    size_value: Mapped[str | None] = mapped_column(String(16))
     # sha256 of the imported fields: a re-import only writes when this changes.
     content_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProductAttribute(Base):
+    """One supplier-provided attribute of a product, name and value as given (e.g. "Colour" = "blk/wht")."""
+
+    __tablename__ = "product_attributes"
+
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str]
 
 
 class Feed(Base):
@@ -195,3 +209,47 @@ class DeadLetter(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     redriven_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ImportState(Base):
+    """Progress of a supplier API import, saved after every page so a failed scan resumes where it stopped."""
+
+    __tablename__ = "import_state"
+
+    supplier_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("suppliers.id"), primary_key=True)
+    base_url: Mapped[str]
+    # "v2" with a snapshot token when the supplier offers one, else "v1" (offset paging that drifts).
+    api_version: Mapped[str] = mapped_column(String(8))
+    # "running", "done" or "failed".
+    status: Mapped[str] = mapped_column(String(16))
+    # When this scan started: on v1, everything updated since then is re-read from the top at the end.
+    scan_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_offset: Mapped[int] = mapped_column(server_default=text("0"))
+    # v1: the SKUs of the last page read, to find where it went if the pages shifted.
+    last_page_skus: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    # v2: the snapshot being read and the cursor into it.
+    snapshot_token: Mapped[str | None]
+    page_cursor: Mapped[str | None]
+    pages: Mapped[int] = mapped_column(server_default=text("0"))
+    items_seen: Mapped[int] = mapped_column(server_default=text("0"))
+    duplicates_dropped: Mapped[int] = mapped_column(server_default=text("0"))
+    windows_reread: Mapped[int] = mapped_column(server_default=text("0"))
+    error: Mapped[str | None]
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaxonomyRemap(Base):
+    """Where each category of one taxonomy release went in the next (scripts/taxonomy_diff.py)."""
+
+    __tablename__ = "taxonomy_remaps"
+
+    old_version: Mapped[str] = mapped_column(String(16), primary_key=True)
+    old_node_id: Mapped[int] = mapped_column(primary_key=True)
+    new_version: Mapped[str] = mapped_column(String(16), primary_key=True)
+    # NULL for deleted nodes, and for split ones (their products need a new pick among the children).
+    new_node_id: Mapped[int | None]
+    # same, renamed, split, merged or deleted.
+    kind: Mapped[str] = mapped_column(String(16))
+    # Matched only by path, or not at all: a person should confirm.
+    needs_review: Mapped[bool]
+    note: Mapped[str]
