@@ -32,11 +32,12 @@ def category_schema(candidate_ids: list[int]) -> dict[str, Any]:
     }
 
 
-async def needs_enrichment(session: AsyncSession, product_ids: list[uuid.UUID]) -> list[uuid.UUID]:
-    """The products that have no category for their current content from the current taxonomy release and
-    prompt. Enriching any other product would only repeat a stored answer."""
+async def needs_enrichment(session: AsyncSession, product_ids: list[uuid.UUID],
+                           taxonomy_version: str | None = None) -> list[uuid.UUID]:
+    """The products that have no category for their current content from the taxonomy release (the served one
+    by default) and current prompt. Enriching any other product would only repeat a stored answer."""
     current = ((ProductCategory.product_id == Product.id)
-               & (ProductCategory.taxonomy_version == settings.taxonomy_version)
+               & (ProductCategory.taxonomy_version == (taxonomy_version or settings.taxonomy_version))
                & (ProductCategory.prompt_version == prompts.CLASSIFY_VERSION)
                & (ProductCategory.content_hash == Product.content_hash))
     query = (select(Product.id).outerjoin(ProductCategory, current)
@@ -44,13 +45,16 @@ async def needs_enrichment(session: AsyncSession, product_ids: list[uuid.UUID]) 
     return list(await session.scalars(query))
 
 
-async def classify_product(session: AsyncSession, product: Product, attempt: int = 1) -> ProductCategory:
-    """Pick the product's leaf category in the current taxonomy release and store it with how it was decided.
+async def classify_product(session: AsyncSession, product: Product, attempt: int = 1,
+                           taxonomy_version: str | None = None) -> ProductCategory:
+    """Pick the product's leaf category in a taxonomy release (the served one by default) and store it with how it
+    was decided. A taxonomy upgrade classifies into the next release before it's served.
     A reply that fails validation is retried once, shown back to the model with the reason. Every model call
     is recorded in enrichment_runs; a failure is recorded, then raised as ModelError."""
     # fastembed runs on the CPU and blocks; keep it off the event loop.
     query = await asyncio.to_thread(embed_query, product_text(product.title, product.brand, product.description))
-    candidates = await nearest_leaves(session, settings.taxonomy_version, query, settings.candidate_count)
+    version = taxonomy_version or settings.taxonomy_version
+    candidates = await nearest_leaves(session, version, query, settings.candidate_count)
     candidate_ids = [c.node_id for c in candidates]
     user = prompts.classify_user(product.title, product.brand, product.description,
                                  [(c.node_id, c.full_path) for c in candidates])
@@ -78,7 +82,7 @@ async def classify_product(session: AsyncSession, product: Product, attempt: int
 
     values = {
         "product_id": product.id,
-        "taxonomy_version": settings.taxonomy_version,
+        "taxonomy_version": version,
         "node_id": None if chosen == NONE else int(chosen),
         "confidence": round(value_probability(reply.tokens, chosen), 4),
         "candidate_ids": candidate_ids,
