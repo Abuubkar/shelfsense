@@ -42,9 +42,18 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .tabs [role=tab]{border:0;background:transparent;padding:10px 14px;border-bottom:2px solid transparent;cursor:pointer}.tabs [role=tab][aria-selected=true]{border-bottom-color:var(--accent)}
 .tabs [role=tabpanel]{padding:16px 0;font-size:15px;line-height:1.7}
 .section{margin-top:30px}.section h2{font-size:16px;margin:0 0 10px}
-.models{width:100%;border-collapse:collapse;font-size:13px}.models td,.models th{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
-.models th{font-weight:500;color:var(--muted);font-size:12px}.models .how{display:block;font-size:11px;color:var(--muted)}
-.models .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.models .bar{width:120px}.models .bar i{display:block;height:8px;margin-top:5px;border-radius:4px;background:var(--accent)}
-.models tr.decided{background:var(--accent-bg)}
+.chart{margin:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.chart figcaption{font-size:14px;margin-bottom:12px}
+.chart ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.chart li{display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr) 64px;gap:14px;align-items:center;padding:8px 10px;border-radius:8px}
+.chart li.decided{background:var(--accent-bg)}
+.chart .label b{display:block;font-size:14px}.chart .label small{display:block;font-size:11px;color:var(--muted)}
+.chart .track{position:relative;height:22px;background:var(--line);border-radius:6px;overflow:hidden}
+.chart .track i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:6px;min-width:3px}
+.chart li.decided .track i{background:#1b7f4c}
+.chart .track em{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-style:normal;font-size:12px;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink);text-shadow:0 0 3px var(--card)}
+.chart .rank{text-align:right;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums}.chart .rank small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.chart .note{font-size:12px;margin:12px 0 0}
+@media (max-width:620px){.chart li{grid-template-columns:1fr 56px}.chart .track{grid-column:1/-1;grid-row:2}}
 .similar{display:flex;gap:12px;overflow-x:auto;list-style:none;padding:0;margin:0}.similar li{min-width:170px;max-width:170px}
 .similar a{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;background:var(--card);text-decoration:none;height:100%}
