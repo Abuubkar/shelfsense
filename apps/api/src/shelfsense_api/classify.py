@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shelfsense_api import prompts
 from shelfsense_api.db import Product, ProductCategory
+from shelfsense_api.embeddings import embed_query, product_text
 from shelfsense_api.llm import ModelError, chat_json, value_probability
 from shelfsense_api.settings import settings
-from shelfsense_api.taxonomy import embed_query, nearest_leaves
+from shelfsense_api.taxonomy import nearest_leaves
 
 NONE = "NONE"
 
@@ -29,9 +30,8 @@ def category_schema(candidate_ids: list[int]) -> dict[str, Any]:
 
 async def classify_product(session: AsyncSession, product: Product) -> ProductCategory:
     """Pick the product's leaf category in the current taxonomy release and store it with how it was decided."""
-    query_text = " ".join(filter(None, [product.title, product.brand, product.description]))
     # fastembed runs on the CPU and blocks; keep it off the event loop.
-    query = await asyncio.to_thread(embed_query, query_text[: prompts.MAX_DESCRIPTION_CHARS])
+    query = await asyncio.to_thread(embed_query, product_text(product.title, product.brand, product.description))
     candidates = await nearest_leaves(session, settings.taxonomy_version, query, settings.candidate_count)
     candidate_ids = [c.node_id for c in candidates]
 
