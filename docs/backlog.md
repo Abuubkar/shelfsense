@@ -66,3 +66,6 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   with a live result count is the better phone design.
 - **GraphQL `Money.amountMinor` is a 32-bit Int** (slice 5b). Amounts above $21,474,836.47 overflow GraphQL's Int.
   Switch to a string or a custom scalar before high-value catalogs.
+- **Min-max normalization and BM25 ties** (slice 5b). When many lexical hits tie at the pool's minimum, min-max gives
+  them all 0 and the hybrid ignores keyword for them. Try the `l2` or z-score normalization technique (or RRF) and
+  compare with the search eval before changing the pipeline.

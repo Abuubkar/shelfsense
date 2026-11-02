@@ -42,18 +42,36 @@ mark{background:var(--hl);color:inherit;border-radius:3px;padding:0 2px}
 .tabs [role=tab]{border:0;background:transparent;padding:10px 14px;border-bottom:2px solid transparent;cursor:pointer}.tabs [role=tab][aria-selected=true]{border-bottom-color:var(--accent)}
 .tabs [role=tabpanel]{padding:16px 0;font-size:15px;line-height:1.7}
 .section{margin-top:30px}.section h2{font-size:16px;margin:0 0 10px}
-.chart{margin:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-.chart figcaption{font-size:14px;margin-bottom:12px}
-.chart ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.chart li{display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr) 64px;gap:14px;align-items:center;padding:8px 10px;border-radius:8px}
-.chart li.decided{background:var(--accent-bg)}
-.chart .label b{display:block;font-size:14px}.chart .label small{display:block;font-size:11px;color:var(--muted)}
-.chart .track{position:relative;height:22px;background:var(--line);border-radius:6px;overflow:hidden}
-.chart .track i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:6px;min-width:3px}
-.chart li.decided .track i{background:#1b7f4c}
-.chart .track em{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-style:normal;font-size:12px;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink);text-shadow:0 0 3px var(--card)}
-.chart .rank{text-align:right;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums}.chart .rank small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
-.chart .note{font-size:12px;margin:12px 0 0}
-@media (max-width:620px){.chart li{grid-template-columns:1fr 56px}.chart .track{grid-column:1/-1;grid-row:2}}
+/* Ranking section: type roles lead 15 / name 15 / data 14 / meta 13 / label 12; spacing on a 4px scale. */
+.ranking{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 24px}
+.ranking .lead{margin:0 0 16px;font-size:15px;line-height:1.5;text-wrap:pretty}
+.ranking .about{display:block;font-size:13px;font-weight:400;color:var(--muted);line-height:1.4}
+.ranking td.value,.around .value{font-variant-numeric:tabular-nums;font-size:14px;text-align:right;white-space:nowrap}
+.stages{width:100%;border-collapse:collapse}
+.stages thead>tr>*{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;padding:0 12px 8px;border-bottom:1px solid var(--line)}
+.stages thead>tr>:first-child{padding-left:16px}
+.stages tbody th,.stages td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle;text-align:left}
+.stages tbody th{padding-left:13px;border-left:3px solid transparent;font-weight:400}
+.stages tbody tr:last-child>*{border-bottom:0}
+.stages .name{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:15px;font-weight:600}
+.stages .tag{white-space:nowrap;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-bg);border-radius:4px;padding:1px 6px}
+.stages .value{width:5.5rem;padding-right:4px;text-align:right}
+.stages .bar{width:38%;min-width:6rem}
+.stages .rank{text-align:right;white-space:nowrap}
+.stages td.rank{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.stages tr.decider{background:var(--accent-bg)}.stages tr.decider .tag{background:var(--card)}.stages tr.decider th{border-left-color:var(--accent)}
+.meter{display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+.around{margin-top:24px}
+.around h3{margin:0 0 8px;font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.around ol{list-style:none;margin:0;padding:0}
+.around li{display:grid;grid-template-columns:2.5rem minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:8px 16px;font-size:14px;border-radius:6px}
+.around li.self{background:var(--accent-bg);font-weight:600}
+.around .pos{font-variant-numeric:tabular-nums;color:var(--muted)}.around li.self .pos{color:var(--ink)}
+.around .title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-decoration:none}
+.around a.title:hover,.around a.title:focus-visible{color:var(--accent);text-decoration:underline}
+.ranking .footnote{margin:16px 0 0;font-size:13px;color:var(--muted);line-height:1.5;text-wrap:pretty}
+@media (max-width:560px){.ranking{padding:16px}.stages .bar{display:none}
+  .stages tbody th{padding-left:9px}.stages td{padding:12px 8px}.stages thead>tr>*{padding:0 8px 8px}.stages thead>tr>:first-child{padding-left:12px}.around li{padding:8px 12px}}
 .similar{display:flex;gap:12px;overflow-x:auto;list-style:none;padding:0;margin:0}.similar li{min-width:170px;max-width:170px}
 .similar a{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;background:var(--card);text-decoration:none;height:100%}

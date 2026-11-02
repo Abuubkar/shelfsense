@@ -278,3 +278,12 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 - **What we did.** TypeScript 5.9.3 and Next.js 16.4.3. The codegen client preset also needed
   `@graphql-typed-document-node/core` as an explicit dev dependency (approved): its output imports it, and pnpm
   doesn't expose transitive packages.
+
+### Min-max normalization zeroes a pile of BM25 ties
+
+- **Problem.** On "merrell hiking boots", every result but the two Merrells had `bm25_normalized` 0.0, although
+  their raw BM25 scores were 8.549 or 7.661. Min-max maps the lowest lexical score in the hybrid pool to 0, and ~40
+  near-identical "… HIKING BOOT" titles tie at that minimum, so for those products the hybrid score is meaning
+  alone. The ranking section also gave tied products consecutive ranks ("#6 by keyword"), an order BM25 never gave.
+- **What we did.** Tied scores now share a rank (1, 2, 2, 4) with "tied with N" beside it, and the footnote says the
+  lowest result scores 0. The normalization itself is unchanged; noted in the backlog.

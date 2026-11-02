@@ -55,11 +55,13 @@ export function specs(p: Product): Spec[] {
 
 /** The product's place in the search it was opened from, with every stage's score, and the results around it
  * (to rank it by each model). Null when it wasn't opened from a search, or isn't among the first 48 results. */
-export async function rankingFor(id: string, search: SearchState): Promise<{ item: SearchItem; items: SearchItem[] } | null> {
+export async function rankingFor(id: string, search: SearchState):
+    Promise<{ item: SearchItem; items: SearchItem[]; weights: [number, number] } | null> {
   if (!search.q) return null;
   const { data } = await api.GET("/v1/search", { params: { query: { q: search.q, page_size: 48, debug: true, ...apiFilters(search) } } });
   const item = data?.items.find((i) => i.id === id);
-  return item && data ? { item, items: data.items } : null;
+  const [keyword = 0.5, meaning = 0.5] = data?.debug?.hybrid_weights ?? [];
+  return item && data ? { item, items: data.items, weights: [keyword, meaning] } : null;
 }
 
 export async function similar(p: Product): Promise<SearchItem[]> {
