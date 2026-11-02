@@ -37,3 +37,44 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 - **What we did.** Recorded it; slice 1 doesn't tune retrieval. See docs/backlog.md.
 - **Why it matters.** Logprob confidence can't catch this: the model is sure among the options it got.
   Candidate recall has to be measured separately (slice 6).
+
+## Slice 2
+
+### Hybrid scores aren't stable across pages, and reranking can't cover thousands
+
+- **Problem.** Min-max normalization depends on what each subquery retrieved, and a cross-encoder can't score a
+  whole result set, yet pages must return every match exactly once while the index changes.
+- **What we did.** A defined result set (lexical OR radial k-NN), a reranked head of 50, a tail paged with
+  `search_after`, all on one PIT snapshot (ADR 0006). A service test pages 5,000 products while changing the
+  index between pages; removing the head exclusion makes it fail with 5,050.
+
+### A PIT search sorted by `_score` alone returns no sort values
+
+- **Problem.** On OpenSearch 3.9.0 the hits came back with `sort: null`, so there was nothing to pass to
+  `search_after`.
+- **What we did.** Sort by `_score` then `product_id`. Measured on a scratch index before writing the code.
+
+### Relay wants a cursor on every edge
+
+- **Problem.** The first cursor design carried the head's 50 IDs (~1 KB). One per GraphQL edge would add ~50 KB to
+  a 48-item page.
+- **What we did.** Each page re-runs the hybrid query on the PIT to recover the head (deterministic on one
+  snapshot), so a cursor is `{pit, rank, search_after}`: 323 characters measured.
+
+### oasdiff reported nullable fields as breaking
+
+- **Problem.** The hand-written spec used `type: [string, 'null']`; Pydantic emits `anyOf` with a null branch, and
+  oasdiff treats the difference as a widened type (10 false errors).
+- **What we did.** The spec uses the `anyOf` form throughout, like Ledgerline's. A deliberately removed field still
+  fails the check.
+
+### zsh ate `:enrich`
+
+- **Problem.** `curl .../products/$id:enrich` under zsh returned 404 for every product: `$id:e` is a zsh filename
+  modifier, so the URL lost its suffix.
+- **What we did.** `${id}:enrich`. The API was fine; the earlier enrichment run used bash.
+
+### The first rerank took five minutes
+
+- **Problem.** fastembed downloads `bge-reranker-base` (~1.1 GB) on first use, inside the first search request.
+- **What we did.** Nothing yet; after the download a rerank of up to 50 products takes 75–300 ms. See backlog.
