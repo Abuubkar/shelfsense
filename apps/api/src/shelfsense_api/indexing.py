@@ -16,8 +16,9 @@ from opensearchpy import ConnectionError as OpenSearchConnectionError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api.db import Product, ProductCategory, Supplier, TaxonomyNode
+from shelfsense_api.db import Product, ProductCategory, ProductExtractedAttribute, Supplier, TaxonomyNode
 from shelfsense_api.embeddings import embed_passages, product_text
+from shelfsense_api.normalize import parse_size, shoe_size_eu
 from shelfsense_api.queue import Outcome, backoff_s
 from shelfsense_api.search import ALIAS
 from shelfsense_api.settings import settings
@@ -56,6 +57,11 @@ async def product_docs(session: AsyncSession, product_ids: list[uuid.UUID]) -> d
         .where(Product.id.in_(product_ids))
         .order_by(Product.id)
     )).all()
+    extracted: dict[Any, dict[str, str]] = {}
+    for product_id, name, value in (await session.execute(
+            select(ProductExtractedAttribute.product_id, ProductExtractedAttribute.name, ProductExtractedAttribute.value)
+            .where(ProductExtractedAttribute.product_id.in_(product_ids)))).all():
+        extracted.setdefault(product_id, {})[name] = value
     texts = [product_text(p.title, p.brand, p.description) for p, *_ in rows]
     # fastembed runs on the CPU and blocks; keep it off the event loop.
     vectors = await asyncio.to_thread(embed_passages, texts) if texts else []
@@ -63,11 +69,24 @@ async def product_docs(session: AsyncSession, product_ids: list[uuid.UUID]) -> d
         str(p.id): {
             "product_id": str(p.id), "supplier": supplier, "supplier_sku": p.supplier_sku, "title": p.title,
             "description": p.description, "brand": p.brand, "gtin": p.gtin, "price_minor": p.price_minor,
-            "currency": p.currency, "color": p.color_base, "size": p.size_value,
+            "currency": p.currency, **_facets(p, extracted.get(p.id, {})),
             "category_id": node_id, "category_path": path, "updated_at": p.updated_at.isoformat(), "embedding": v,
         }
         for (p, supplier, node_id, path), v in zip(rows, vectors, strict=True)
     }
+
+
+def _facets(p: Product, extracted: dict[str, str]) -> dict[str, Any]:
+    """Facet values: the supplier's own columns first, then what the model read from the listing (grounded)."""
+    gender = p.gender or extracted.get("gender")
+    if p.size_system and p.size_value:
+        system, size = p.size_system, p.size_value
+    else:
+        parsed = parse_size(extracted["size"]) if extracted.get("size") else None
+        system, size = parsed if parsed else (None, None)
+    eu = shoe_size_eu(system, size, gender) if system and system != "alpha" and size else None
+    return {"color": p.color_base or extracted.get("color"), "material": p.material or extracted.get("material"),
+            "gender": gender, "size": size, "size_system": system, "size_eu": float(eu) if eu is not None else None}
 
 
 async def bulk_index(os: AsyncOpenSearch, docs: dict[str, dict[str, Any]], sizer: BatchSizer) -> list[Outcome]:

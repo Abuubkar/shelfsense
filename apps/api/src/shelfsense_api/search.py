@@ -29,6 +29,16 @@ FACET_SIZE = 20
 _SOURCE = {"excludes": ["embedding"]}
 TAIL_SORT = [{"_score": "desc"}, {"product_id": "asc"}]  # with a PIT, search_after needs an explicit tiebreaker
 
+# Added to products_v1 in place (slice 5a): adding fields never changes how existing ones are indexed. Changing
+# or removing a field still means a new index version and an alias move.
+NEW_FIELDS = {
+    "gender": {"type": "keyword"},
+    "material": {"type": "keyword"},
+    "size_system": {"type": "keyword"},
+    # Shoe sizes in EU numbers (normalize.shoe_size_eu), so "size 8" finds a boot listed as "EU 39.5".
+    "size_eu": {"type": "float"},
+}
+
 INDEX_TEMPLATE = {
     "index_patterns": [INDEX],
     "template": {
@@ -45,9 +55,10 @@ INDEX_TEMPLATE = {
                 "gtin": {"type": "keyword"},
                 "price_minor": {"type": "long"},
                 "currency": {"type": "keyword"},
-                # Supplier values as given ("blk/gry"); normalized to a base palette in slice 5.
+                # Base palette colour (normalize.BASE_COLORS), from the supplier's column or the listing's text.
                 "color": {"type": "keyword", "normalizer": "lowercase"},
                 "size": {"type": "keyword"},
+                **NEW_FIELDS,
                 "category_id": {"type": "integer"},
                 "category_path": {"type": "text", "analyzer": "english"},
                 "updated_at": {"type": "date"},
@@ -93,6 +104,8 @@ async def ensure_index(os: AsyncOpenSearch) -> None:
     await os.indices.put_index_template(name=INDEX, body=INDEX_TEMPLATE)
     if not await os.indices.exists(index=INDEX):
         await os.indices.create(index=INDEX)
+    else:
+        await os.indices.put_mapping(index=INDEX, body={"properties": NEW_FIELDS})
 
 
 @dataclass(frozen=True)
@@ -104,17 +117,32 @@ class Filters:
     category_id: tuple[int, ...] = ()
     price_min: int | None = None
     price_max: int | None = None
+    gender: tuple[str, ...] = ()
+    material: tuple[str, ...] = ()
+    exclude_color: tuple[str, ...] = ()
+    exclude_material: tuple[str, ...] = ()
+    size: str | None = None  # a letter size ("M")
+    size_eu: float | None = None  # a shoe size, in EU numbers
 
 
 def filter_clauses(filters: Filters) -> list[dict[str, Any]]:
     clauses: list[dict[str, Any]] = []
-    for name in ("brand", "color", "category_id"):
+    for name in ("brand", "color", "category_id", "gender", "material"):
         values = getattr(filters, name)
         if values:
             clauses.append({"terms": {name: sorted(set(values))}})
     price = {op: v for op, v in (("gte", filters.price_min), ("lte", filters.price_max)) if v is not None}
     if price:
         clauses.append({"range": {"price_minor": price}})
+    if filters.size:
+        clauses.append({"term": {"size": filters.size}})
+    if filters.size_eu is not None:
+        clauses.append({"term": {"size_eu": filters.size_eu}})
+    excluded = [{"terms": {name: sorted(set(values))}}
+                for name, values in (("color", filters.exclude_color), ("material", filters.exclude_material))
+                if values]
+    if excluded:
+        clauses.append({"bool": {"must_not": excluded}})
     return clauses
 
 
@@ -170,12 +198,16 @@ class SearchPage:
 
 
 async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, after: str | None,
-                 debug: bool = False) -> SearchPage:
+                 debug: bool = False, scope: dict[str, Any] | None = None,
+                 carry: dict[str, Any] | None = None) -> SearchPage:
     """One page of a query's result set. A cursor holds the PIT, the rank reached, and the tail's search_after
     position. The head isn't stored in it: each page re-runs the hybrid query on the same PIT, which returns the
-    same head, so cursors stay small enough to put one on every GraphQL edge."""
+    same head, so cursors stay small enough to put one on every GraphQL edge.
+
+    `scope` is what a cursor is bound to (by default the query and filters); `carry` rides along in every cursor
+    for the caller, e.g. the query parse page 1 used, so later pages search exactly the same way."""
     q = " ".join(q.split())
-    scope = {"q": q, "filters": asdict(filters)}
+    scope = scope or {"q": q, "filters": asdict(filters)}
     timings: dict[str, int] = {}
     position = cursor.decode(after, scope, settings.cursor_secret) if after else {"rank": 0, "after": None}
 
@@ -208,7 +240,8 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
     except ConnectionError as exc:
         raise SearchUnavailable(str(exc)) from exc
 
-    cursors = [cursor.encode({"pit": pit, "rank": h.rank, "after": h.sort}, scope, settings.cursor_secret)
+    extra = {"carry": carry} if carry else {}
+    cursors = [cursor.encode({"pit": pit, "rank": h.rank, "after": h.sort, **extra}, scope, settings.cursor_secret)
                for h in items]
     if not more:
         await os.delete_pit(body={"pit_id": [pit]})

@@ -10,6 +10,7 @@ from ..types import UNSET, Unset
 
 if TYPE_CHECKING:
     from ..models.facet import Facet
+    from ..models.query_parse import QueryParse
     from ..models.search_debug import SearchDebug
     from ..models.search_item import SearchItem
 
@@ -26,6 +27,7 @@ class SearchResponse:
         facets (list[Facet]):
         next_cursor (None | str):
         debug (None | SearchDebug | Unset):
+        query_parse (None | QueryParse | Unset): How `q` was read; null when `q` is empty or `parse` is false.
     """
 
     items: list[SearchItem]
@@ -33,9 +35,11 @@ class SearchResponse:
     facets: list[Facet]
     next_cursor: None | str
     debug: None | SearchDebug | Unset = UNSET
+    query_parse: None | QueryParse | Unset = UNSET
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from ..models.query_parse import QueryParse  # noqa: PLC0415
         from ..models.search_debug import SearchDebug  # noqa: PLC0415
 
         items = []
@@ -61,6 +65,14 @@ class SearchResponse:
         else:
             debug = self.debug
 
+        query_parse: dict[str, Any] | None | Unset
+        if isinstance(self.query_parse, Unset):
+            query_parse = UNSET
+        elif isinstance(self.query_parse, QueryParse):
+            query_parse = self.query_parse.to_dict()
+        else:
+            query_parse = self.query_parse
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
@@ -73,12 +85,15 @@ class SearchResponse:
         )
         if debug is not UNSET:
             field_dict["debug"] = debug
+        if query_parse is not UNSET:
+            field_dict["query_parse"] = query_parse
 
         return field_dict
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.facet import Facet  # noqa: PLC0415
+        from ..models.query_parse import QueryParse  # noqa: PLC0415
         from ..models.search_debug import SearchDebug  # noqa: PLC0415
         from ..models.search_item import SearchItem  # noqa: PLC0415
 
@@ -123,12 +138,30 @@ class SearchResponse:
 
         debug = _parse_debug(d.pop("debug", UNSET))
 
+        def _parse_query_parse(data: object) -> None | QueryParse | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                query_parse_type_0 = QueryParse.from_dict(data)
+
+                return query_parse_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | QueryParse | Unset, data)
+
+        query_parse = _parse_query_parse(d.pop("query_parse", UNSET))
+
         search_response = cls(
             items=items,
             total=total,
             facets=facets,
             next_cursor=next_cursor,
             debug=debug,
+            query_parse=query_parse,
         )
 
         search_response.additional_properties = d

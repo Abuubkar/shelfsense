@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Shelfsense
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Marketplace catalog enrichment and search. This file is the source of truth for the HTTP API: the app is
     checked against it with `make contract-check`, and the typed clients are generated from it with
@@ -226,6 +226,15 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: parse
+          in: query
+          required: false
+          description: |
+            Read filters out of `q` ("women's boots under $120 size 8"). Explicit filter parameters win over parsed
+            ones for the same facet. Later pages reuse page 1's parse (it travels in the cursor).
+          schema:
+            type: boolean
+            default: true
       responses:
         '200':
           description: One page of results.
@@ -496,7 +505,7 @@ components:
     Product:
       type: object
       required: [id, supplier, supplier_sku, title, description, brand, gtin, price, attributes, color_base,
-                 material, gender, size_system, size_value, category]
+                 material, gender, size_system, size_value, extracted_attributes, category]
       properties:
         id:
           type: string
@@ -550,6 +559,11 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        extracted_attributes:
+          type: array
+          description: Attributes the model read from the listing, each with the exact quote that states it.
+          items:
+            $ref: '#/components/schemas/ExtractedAttribute'
         category:
           anyOf:
             - $ref: '#/components/schemas/Category'
@@ -684,6 +698,106 @@ components:
           anyOf:
             - $ref: '#/components/schemas/SearchDebug'
             - type: 'null'
+        query_parse:
+          anyOf:
+            - $ref: '#/components/schemas/QueryParse'
+            - type: 'null'
+          description: How `q` was read; null when `q` is empty or `parse` is false.
+    ExtractedAttribute:
+      type: object
+      required: [name, value, unit, evidence_field, evidence_start, evidence_end, evidence_text]
+      properties:
+        name:
+          type: string
+          description: color, material, gender, size or length.
+        value:
+          type: string
+          description: Normalized (base colour, millimetres, "US 8", ...).
+        unit:
+          anyOf:
+            - type: string
+            - type: 'null'
+        evidence_field:
+          type: string
+          description: title, description, brand or raw_attributes.
+        evidence_start:
+          type: integer
+          description: Offset into the field in Unicode code points (in JavaScript, index Array.from(text)).
+        evidence_end:
+          type: integer
+        evidence_text:
+          type: string
+          description: The exact quote; equals the field's text from evidence_start to evidence_end.
+    QueryParse:
+      type: object
+      required: [source, keywords, category_hint, filters, price_relaxed, ms]
+      properties:
+        source:
+          type: string
+          enum: [rules, cache, llm, degraded]
+          description: |
+            rules = no filter words, searched as typed; cache = an earlier model parse; llm = parsed now;
+            degraded = the model was too slow or failed, so `q` was searched as typed ("showing broader results").
+        keywords:
+          type: string
+          description: The text searched once filter words are taken out.
+        category_hint:
+          anyOf:
+            - type: string
+            - type: 'null'
+        filters:
+          $ref: '#/components/schemas/ParsedFilters'
+        price_relaxed:
+          type: boolean
+          description: The parsed price range matched nothing, so it was dropped.
+        ms:
+          type: integer
+    ParsedFilters:
+      type: object
+      required: [price_min, price_max, colors, exclude_colors, materials, exclude_materials, gender, size]
+      properties:
+        price_min:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          description: Minor units.
+        price_max:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        colors:
+          type: array
+          items:
+            type: string
+        exclude_colors:
+          type: array
+          items:
+            type: string
+        materials:
+          type: array
+          items:
+            type: string
+        exclude_materials:
+          type: array
+          items:
+            type: string
+        gender:
+          anyOf:
+            - type: string
+            - type: 'null'
+        size:
+          anyOf:
+            - $ref: '#/components/schemas/ParsedSize'
+            - type: 'null'
+    ParsedSize:
+      type: object
+      required: [system, value]
+      properties:
+        system:
+          type: string
+          enum: [US, UK, EU, alpha]
+        value:
+          type: string
     WorkQueue:
       type: string
       enum: [enrich, index]

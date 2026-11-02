@@ -9,7 +9,7 @@ from shelfsense_api.llm import value_probability
 def test_category_enum_is_exactly_the_candidates_plus_none() -> None:
     schema = category_schema([3640, 187, 505295])
     assert schema["properties"]["category_id"]["enum"] == ["3640", "187", "505295", "NONE"]
-    assert schema["required"] == ["category_id"]
+    assert schema["required"] == ["category_id", "attributes"]
 
 
 def test_category_enum_keeps_candidate_order_and_drops_duplicates() -> None:
