@@ -17,5 +17,24 @@ services:
       timeout: 3s
       retries: 20
 
+  opensearch:
+    image: opensearchproject/opensearch:3.9.0
+    environment:
+      discovery.type: single-node
+      # Local development only: no TLS, no auth (docs/adr/0004). Never expose this port beyond localhost.
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+    ports:
+      - "127.0.0.1:9201:9200"  # 9200 left free for other local projects
+    volumes:
+      - osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs localhost:9200/_cluster/health?wait_for_status=yellow\\&timeout=1s"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
 volumes:
   pgdata:
+  osdata:

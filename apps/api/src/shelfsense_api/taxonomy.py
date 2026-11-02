@@ -1,17 +1,14 @@
-"""The Google Product Taxonomy: parsing the release files, embedding paths, and picking candidate leaves."""
+"""The Google Product Taxonomy: parsing the release files and picking candidate leaves."""
 
 import hashlib
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 
-from fastembed import TextEmbedding
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shelfsense_api.db import TaxonomyNode
 
-EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 VERSION_HEADER = "# Google_Product_Taxonomy_Version: "
 
 
@@ -52,22 +49,6 @@ def read_release(path: Path) -> tuple[str, list[Node]]:
             parents.add(parent_id)
         nodes.append(Node(node_id, parent_id, segments[-1], full_path, len(segments), is_leaf=False))
     return version, [Node(**{**n.__dict__, "is_leaf": n.node_id not in parents}) for n in nodes]
-
-
-@cache
-def _embedder() -> TextEmbedding:
-    # Downloads the model on first use (~130 MB, cached by fastembed), then runs on CPU.
-    return TextEmbedding(model_name=EMBEDDING_MODEL)
-
-
-def embed_paths(paths: list[str]) -> list[list[float]]:
-    """Taxonomy paths are the documents searched over: bge's passage side."""
-    return [v.tolist() for v in _embedder().passage_embed(paths)]
-
-
-def embed_query(text: str) -> list[float]:
-    """A product's text is the query: bge prefixes it with its retrieval instruction."""
-    return next(iter(_embedder().query_embed(text))).tolist()
 
 
 async def nearest_leaves(session: AsyncSession, version: str, query: list[float], k: int) -> list[TaxonomyNode]:

@@ -14,8 +14,9 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from shelfsense_api.db import SessionLocal, TaxonomyNode
+from shelfsense_api.embeddings import embed_passages
 from shelfsense_api.settings import settings
-from shelfsense_api.taxonomy import embed_paths, read_release
+from shelfsense_api.taxonomy import read_release
 
 
 async def main(path: Path) -> None:
@@ -27,7 +28,7 @@ async def main(path: Path) -> None:
             return
 
         started = time.perf_counter()
-        vectors = embed_paths([n.full_path for n in nodes])
+        vectors = embed_passages([n.full_path for n in nodes])
         print(f"embedded {len(nodes)} paths in {time.perf_counter() - started:.1f}s")
 
         # Parents come before children in the file, so inserting in file order satisfies the parent foreign key.
