@@ -1,0 +1,13 @@
+[project]
+name = "shelfsense-worker-enrich"
+version = "0.1.0"
+description = "Shelfsense enrich worker: consumes the enrich queue"
+requires-python = ">=3.13"
+dependencies = ["shelfsense-api"]
+
+[tool.uv.sources]
+shelfsense-api = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
