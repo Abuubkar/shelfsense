@@ -2,6 +2,8 @@
 
 This is where the project ends up after slice 8. It is a destination, not a to-do list: slice 1 copies it into `docs/architecture.md`, and each folder, service and dependency appears only when a slice needs it (see HOW_WE_BUILD.md).
 
+> Decided since: Python 3.13 and Postgres 18 instead of 3.12 and 16 (docs/adr/0001).
+
 **Stack:** Python 3.12, uv workspaces, FastAPI, Pydantic v2, SQLAlchemy 2.0 async + asyncpg, Alembic, Strawberry GraphQL, Postgres 16 (source of truth), OpenSearch 2.x (search, with the k-NN plugin and search pipelines), AWS SQS + S3 via LocalStack (aioboto3 client), Redis 7, fastembed (bge-small-en-v1.5, bge-reranker-base), Next.js 15 + TypeScript storefront search UI, pnpm.
 
 ```text

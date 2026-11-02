@@ -6,6 +6,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://shelfsense:shelfsense@localhost:5436/shelfsense"
 
+    # POST /v1/feeds:import-local only reads files under this directory.
+    feeds_dir: str = "data/feeds"
+
     # The Google Product Taxonomy release products are classified into (data/taxonomy/<version>.txt).
     taxonomy_version: str = "2021-09-21"
     # Leaves the embedding pre-filter hands the model; the right leaf must be among them (candidate recall).
