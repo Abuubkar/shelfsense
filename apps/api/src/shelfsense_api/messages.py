@@ -29,6 +29,8 @@ class EnrichRequest(BaseModel):
     # 1 for the first delivery; each resubmission of transient failures adds one.
     attempt: int = Field(default=1, ge=1)
     feed_id: uuid.UUID | None = None
+    # Classify into this taxonomy release instead of the served one: a taxonomy upgrade preparing the next release.
+    taxonomy_version: str | None = None
 
 
 class IndexRequest(BaseModel):
