@@ -24,3 +24,15 @@ Inspiration (patterns, not designs): Baymard on applied filters and filter UI
 federated autocomplete (https://www.algolia.com/doc/guides/solutions/ecommerce/autocomplete/tutorials/federated-search/),
 NN/g on mobile faceted search (https://www.nngroup.com/articles/mobile-faceted-search/), and the AI shopping modes
 (Google AI Mode comparisons, Amazon's Rufus, now Alexa for Shopping).
+
+## Round 2: product detail designs for A (A was chosen)
+
+On `?variant=A` the bar cycles `?detail=1..5`; click any product.
+
+| Detail | Question it answers |
+|---|---|
+| 1. Quick-view modal | Are the essentials (specs, evidence, price) enough without leaving the grid? |
+| 2. Full product page | Does a classic page (gallery, buy box, Description/Specifications/Evidence tabs, similar) earn the navigation? |
+| 3. Specs-first drawer | Do shoppers trust facts more when each says where it came from (seller's data vs the listing's words)? |
+| 4. Inline expand | Does opening details in place, under the row, keep comparison easy? |
+| 5. Master-detail split | Is a list + detail pane better for scanning many products one after another? |

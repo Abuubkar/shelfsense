@@ -1,13 +1,14 @@
 // PROTOTYPE variant A: classic storefront. Facet sidebar + card grid + "load more". The parse shows up as
 // "understood" chips above the facets. Question: is the familiar layout enough? Throwaway.
 import { esc, money, parsedSummary, search } from "./api.js";
+import { DETAILS, currentDetail } from "./details.js";
 
 export const NAME = "Classic storefront";
 const FACET_PARAM = { brand: "brand", color: "color", category_id: "category_id" };
 const SWATCH = { black: "#222", white: "#f4f4f0", gray: "#9a9a96", brown: "#7a5232", beige: "#d9c7a3", red: "#c8312f", pink: "#e98cb2", orange: "#ec7a26", yellow: "#efc63a", green: "#3f8f4e", blue: "#2f6fd0", navy: "#1f2f5c", purple: "#7c4bb3", gold: "#c9a227", silver: "#c3c7cc", multicolor: "linear-gradient(135deg,#e54,#fc3,#4b7,#38d)" };
 
 export function mount(root) {
-  const state = { q: "waterproof women's hiking boots under $120", selected: {}, price: null, items: [], cursor: null, last: null };
+  const state = { q: new URLSearchParams(location.search).get("aq") ?? "waterproof women's hiking boots under $120", selected: {}, price: null, items: [], cursor: null, last: null };
   root.innerHTML = `
   <style>
     .a-top{display:flex;gap:16px;align-items:center;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:2}
@@ -34,7 +35,11 @@ export function mount(root) {
   <div class="a-body"><aside class="a-side"></aside><main><div class="a-head"></div><div class="a-banners"></div><div class="a-grid"></div><button class="a-more" hidden>Load more</button></main></div>`;
   const $ = (s) => root.querySelector(s);
   $("input").value = state.q;
-  $("form").onsubmit = (e) => { e.preventDefault(); state.q = $("input").value; state.selected = {}; state.price = null; run(); };
+  $("form").onsubmit = (e) => {
+    e.preventDefault(); state.q = $("input").value; state.selected = {}; state.price = null;
+    const u = new URL(location); u.searchParams.set("aq", state.q); history.replaceState(null, "", u);  // survives switching detail designs
+    run();
+  };
   $(".a-more").onclick = () => run(true);
 
   function filters() {
@@ -68,11 +73,16 @@ export function mount(root) {
     $(".a-head").innerHTML = `<h2>${body.total.toLocaleString()} results</h2><span class="muted">for “${esc(qp?.keywords ?? state.q)}”</span>`;
     $(".a-banners").innerHTML = (qp?.source === "degraded" ? `<div class="a-banner">Showing broader results: we couldn’t read filters from your search in time.</div>` : "")
       + (qp?.price_relaxed ? `<div class="a-banner">Nothing matched your price, so we’re showing all prices.</div>` : "");
-    $(".a-grid").innerHTML = state.items.map((i) => `
-      <article class="a-card"><div class="a-img" style="background:${SWATCH[i.color] ?? "#b9b7ae"}">${esc(i.color ?? "")}</div>
+    $(".a-grid").innerHTML = state.items.map((i, n) => `
+      <article class="a-card" data-n="${n}" data-id="${i.id}" tabindex="0" style="cursor:pointer"><div class="a-img" style="background:${SWATCH[i.color] ?? "#b9b7ae"}">${esc(i.color ?? "")}</div>
       <div class="b"><div class="t">${esc(i.title)}</div><div class="m">${esc(i.brand ?? "")}${i.size ? " · " + esc(i.size) : ""}</div>
       <div class="m">${esc((i.category_path ?? "").split(" > ").slice(-1)[0])}</div><div class="price">${money(i.price)}</div></div></article>`).join("");
     $(".a-more").hidden = !state.cursor;
+    root.querySelectorAll(".a-card").forEach((card) => {
+      const open = () => DETAILS[currentDetail()].open({ item: state.items[Number(card.dataset.n)], card, root });
+      card.onclick = open;
+      card.onkeydown = (e) => { if (e.key === "Enter") open(); };
+    });
   }
   run();
 }
