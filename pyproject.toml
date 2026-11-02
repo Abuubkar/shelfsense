@@ -3,17 +3,19 @@ name = "shelfsense"
 version = "0.1.0"
 description = "Workspace root: dev tooling and scripts. App code lives in apps/."
 requires-python = ">=3.13"
-dependencies = ["shelfsense-api"]
+dependencies = ["shelfsense-api", "shelfsense-worker-enrich", "shelfsense-worker-index"]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "packages/clients/python"]
+members = ["apps/api", "apps/worker_enrich", "apps/worker_index", "packages/clients/python"]
 
 [tool.uv.sources]
 shelfsense-api = { workspace = true }
 shelfsense-client = { workspace = true }
+shelfsense-worker-enrich = { workspace = true }
+shelfsense-worker-index = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests"]
@@ -39,4 +41,4 @@ extend-exclude = ["packages/clients/python"]
 select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["shelfsense_api", "shelfsense_client"]
+known-first-party = ["shelfsense_api", "shelfsense_client", "shelfsense_worker_enrich", "shelfsense_worker_index"]
