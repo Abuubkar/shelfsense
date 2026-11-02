@@ -78,3 +78,77 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 
 - **Problem.** fastembed downloads `bge-reranker-base` (~1.1 GB) on first use, inside the first search request.
 - **What we did.** Nothing yet; after the download a rerank of up to 50 products takes 75–300 ms. See backlog.
+
+## Slice 3
+
+### LocalStack now needs an account
+
+- **Problem.** The plan names LocalStack, but since 2026.03.0 its image refuses to start without an auth token.
+- **What we did.** Floci 2.3.0 (MIT, no account). Before writing code against it we probed what we'd rely on:
+  receive counts, redrive after 5 receives, `StartMessageMoveTask` (and its refusal of a second task), presigned
+  PUT, `NoSuchKey`. All matched the AWS docs (docs/adr/0008).
+- **Alternatives.** LocalStack with a Hobby token per developer and CI runner; ElasticMQ plus an S3 server (no
+  move tasks); moto (no move tasks).
+
+### `enrich.dlq` isn't a valid SQS queue name
+
+- **Problem.** The plan's DLQ names contain dots; SQS allows only letters, digits, `-` and `_` (dots only in
+  the `.fifo` suffix).
+- **What we did.** `aws.dlq_name()` makes `enrich-dlq` and `index-dlq`, the one place the convention lives.
+
+### A late heartbeat could undo the backoff
+
+- **Problem.** The heartbeat extends visibility to the full timeout every third of it. If it fired just after
+  the consumer set a short backoff delay on a failed message, the retry would wait a full timeout instead.
+- **What we did.** `_process` cancels and awaits the heartbeat before deleting, dead-lettering or delaying the
+  message.
+
+### Skipped products must still be indexed
+
+- **Problem.** On redelivery after a crash, products already enriched are skipped. If the crash came after
+  enriching but before sending the index message, skipping them would leave them enriched but never searchable.
+- **What we did.** Skipped products count as done and go into the index message again. Re-indexing is
+  idempotent; losing them isn't.
+
+### Dead-lettering a product twice on redelivery
+
+- **Problem.** A message whose worker dies after dead-lettering a product, but before deleting the message,
+  comes back, and the product fails again: a second DLQ message, and a DLQ count that no longer equals the
+  failed products.
+- **What we did.** The `dead_letters` row is committed before the DLQ send, with a partial unique index on
+  (queue, product) for open letters, and `sent_at` set after the send. A redelivery finds the open row and
+  doesn't send again. A crash between the send and `sent_at` can still send twice, which is preferred over
+  losing the message.
+
+### The chaos script deadlocked on its own API
+
+- **Problem.** `scripts/chaos.py` runs the API in its own event loop and uploads through the generated client,
+  which is synchronous: calling it on the loop blocked the server it was waiting for.
+- **What we did.** The upload runs in `asyncio.to_thread`.
+
+### Index messages are too small for the adaptive batch size
+
+- **Problem.** The enrich worker sends one index message per enrich message (at most 50 products), so the
+  batch sizer halves from 500 toward 50 on rejections but never splits a batch in the worker. Its effect shows
+  in `scripts/sync_index.py` (2,000 products per call) and in the unit tests.
+- **What we did.** Kept it, and parked batching across messages in docs/backlog.md.
+
+### aiobotocore pins wrapt below 2
+
+- **Problem.** Adding aioboto3 15.5.0 downgraded `wrapt` from 2.5.2 to 1.17.3 (aiobotocore 2.25.1 requires
+  `wrapt<2`). Only testcontainers also uses it, and its tests pass on 1.17.
+- **What we did.** Accepted the downgrade; revisit when aiobotocore lifts the pin.
+
+### Deleted documents hid live ones from k-NN search
+
+- **Problem.** After two chaos runs had indexed and then deleted 4,000 products, `make smoke`'s paged query
+  "outdoor gear for the trail" returned 5 products where an exact scan finds 13. Lucene only marks deleted
+  documents; they stay in each segment's HNSW graph until the segment merges. The approximate search fills its
+  candidate list (`ef_search`, default 100) with the nearest nodes, deleted ones included, and drops those
+  afterwards. The chaos products were near-duplicates of the query ("Trail Hiking Boot …"), so they took the
+  slots. Radial search with `ef_search` 200 found 9, with 1,000 all 13.
+- **What we did.** `_forcemerge?only_expunge_deletes=true` on the dev index restored all 13 at the default
+  `ef_search`, and the chaos script now does the same after its cleanup.
+- **What it means beyond the script.** Every update is a delete plus an insert in Lucene, and the index worker
+  re-indexes products (on redelivery, on every enrichment). The merge policy keeps deletes to a share of the
+  index, but recall drops in the meantime. Parked in docs/backlog.md for the slice 6 eval.

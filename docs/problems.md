@@ -10,7 +10,7 @@ stable value to branch on.
 
 ## not_found
 
-404. No product, feed or feed file with that ID or path.
+404. No product or feed with that ID.
 
 ## invalid_cursor
 
@@ -34,3 +34,21 @@ category that wasn't a candidate). `detail` starts with the specific reason.
 ## search_unavailable
 
 503. OpenSearch couldn't be reached.
+
+## feed_not_uploaded
+
+409. The feed was committed before its file was uploaded. `PUT` the file to the feed's `upload_url` (it expires
+after 15 minutes; create a new feed if it has), then commit again.
+
+## backlog_full
+
+429. The enrichment queue holds more than `MAX_ENRICH_BACKLOG` messages, so new feeds are refused for now. Retry
+after the `Retry-After` header's seconds, estimated from the products enriched in the last hour.
+
+## redrive_in_progress
+
+409. A redrive of this dead-letter queue is already moving messages. SQS allows one move task per queue at a time.
+
+## queue_unavailable
+
+503. SQS or S3 couldn't be reached, or refused the request. `detail` has the underlying error. Retry later.

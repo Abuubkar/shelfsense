@@ -7,15 +7,34 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   to compare on the slice 6 golden set: embed `name + parent path + a few synonyms` per leaf; take candidates
   from both a title-only and a full-text query; or cap candidates per top-level branch so one branch can't take
   all 15. Cost: a re-embed of 5.6k paths (~50 s) and an eval run.
-- **Embedding the query blocks a thread per request** (slice 1). Fine at one request at a time; the enrichment
-  worker in slice 3 should embed in batches instead.
+- **Embedding the query blocks a thread per request** (slice 1). The enrich worker (slice 3) still embeds one
+  product per call, in a thread; at 8 concurrent calls against the stub that was ~37 products/s. Embed a
+  message's products in one batch before the model calls if the embedding shows up in profiles (slice 8).
 - **Semantic threshold lets in weak matches** (slice 2). At `min_score` 0.80 (cos 0.6), "something to keep drinks
   cold" also returns a laptop sleeve, ranked last by the reranker. Tune `KNN_MIN_SCORE` and `HYBRID_WEIGHTS`
   against nDCG on the slice 6 golden set; consider also dropping head items below a rerank score.
 - **Models download on the first request** (slice 2). The first search after a fresh install waits for the
   reranker download (~1.1 GB). Warm both models at API startup, or in the Docker image build (slice 7).
 - **Every tail page re-runs the hybrid query** (slice 2). ~10–50 ms per page to recover the head's IDs, the price
-  of small cursors (ADR 0006). If deep paging gets hot, cache head IDs per PIT in Redis (slice 3 brings Redis).
+  of small cursors (ADR 0006). If deep paging gets hot, cache head IDs per PIT in Redis (slice 5 brings Redis).
 - **Multi-select facets** (slice 2). Facet counts are drill-down (after all filters, including the facet's own).
   A storefront usually wants each facet counted without its own filter so other values stay visible; decide with
   the UI in slice 5.
+- **Index requests are capped at one enrich message** (slice 3). Each index message holds at most 50 products, so
+  the adaptive batch size can't grow past 50 in the worker. Receive up to 10 index messages and index them as one
+  bulk call (acking each message by its own items), when indexing throughput matters.
+- **Feed commit runs inside the request** (slice 3). 2,000 rows commit in ~0.6 s; 100k rows would take tens of
+  seconds and risk client timeouts. Make commit return 202 and run the import from an `import` queue, with
+  `GET /v1/feeds/{id}` for status.
+- **Admin endpoints have no auth** (slice 3). `POST /v1/admin/dlq/{queue}/redrive` is open, like the rest of the
+  local API. Needs an admin role before any shared deployment.
+- **A redrive keeps the message's attempt count** (slice 3). SQS's move task doesn't change bodies, so a product
+  dead-lettered after 3 transient failures gets one more try when redriven. If redrives should start fresh, redrive
+  by receive-and-resend with `attempt` reset instead of the move task.
+- **Retry-After without a recent rate** (slice 3). With no enrichments in the last hour (workers down, or a cold
+  start) a full backlog answers a fixed 300 s. Report "no workers" separately once slice 8 has worker heartbeats.
+- **k-NN recall drops while deleted documents await merging** (slice 3). Measured: 5 of 13 radial matches at the
+  default `ef_search` 100 with ~4k deleted near-duplicates in the graphs; 13 of 13 at `ef_search` 1,000 or after
+  expunging deletes (docs/challenges.md). Options for slice 6, judged by recall against exact search on the golden
+  queries: pass `method_parameters.ef_search` on the radial query, lower `index.merge.policy.deletes_pct_allowed`,
+  or skip re-indexing products whose document didn't change.
