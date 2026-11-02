@@ -7,3 +7,6 @@ __pycache__/
 data/taxonomy/*.tmp
 .DS_Store
 build/
+
+# Regenerable with scripts/seed.py --seed N
+evals/ground_truth.parquet

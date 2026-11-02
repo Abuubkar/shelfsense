@@ -36,7 +36,7 @@ async def http() -> AsyncIterator[httpx.AsyncClient]:
 async def imported(session: AsyncSession, supplier: str) -> dict[str, int]:
     rows = await session.execute(select(Product.supplier_sku, Product.price_minor)
                                  .join(Supplier, Supplier.id == Product.supplier_id).where(Supplier.code == supplier))
-    return dict(rows.tuples().all())
+    return dict(rows.all())
 
 
 async def truth(http: httpx.AsyncClient) -> dict[str, int]:
