@@ -4,7 +4,17 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import VECTOR
-from sqlalchemy import BigInteger, DateTime, ForeignKey, ForeignKeyConstraint, String, UniqueConstraint, func, text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -62,18 +72,18 @@ class Product(Base):
 
 
 class Feed(Base):
-    """One distinct feed file from one supplier, known by its content hash: importing the same bytes again finds
-    this row instead of making a new one."""
+    """One uploaded feed file. Its bytes live in the feeds bucket under the feed's ID; the hash and counts are
+    filled in when it's committed. Committing it again changes nothing."""
 
     __tablename__ = "feeds"
-    __table_args__ = (UniqueConstraint("supplier_id", "file_sha256"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
     supplier_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("suppliers.id"))
     file_name: Mapped[str]
-    file_sha256: Mapped[str] = mapped_column(String(64))
-    row_count: Mapped[int]
-    rejected_count: Mapped[int]
+    file_sha256: Mapped[str | None] = mapped_column(String(64))
+    row_count: Mapped[int | None]
+    rejected_count: Mapped[int | None]
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -130,9 +140,58 @@ class ProductCategory(Base):
     candidate_ids: Mapped[list[int]] = mapped_column(JSONB)
     model: Mapped[str]
     prompt_version: Mapped[str]
+    # The product content this was decided from: a product whose hash has changed since needs enriching again.
+    content_hash: Mapped[str] = mapped_column(String(64))
     prompt_tokens: Mapped[int]
     output_tokens: Mapped[int]
     total_ms: Mapped[int]
     prompt_eval_ms: Mapped[int]
     eval_ms: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EnrichmentRun(Base):
+    """One model call to enrich one product, successful or not: the audit trail, and the measured rate that
+    backpressure is computed from."""
+
+    __tablename__ = "enrichment_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id"), index=True)
+    # Which delivery of the product's enrich request this was: 1, then 2 and 3 for resubmissions.
+    attempt: Mapped[int]
+    # "enriched" or "failed".
+    outcome: Mapped[str] = mapped_column(String(16))
+    error_code: Mapped[str | None] = mapped_column(String(32))
+    model: Mapped[str]
+    prompt_version: Mapped[str]
+    content_hash: Mapped[str] = mapped_column(String(64))
+    prompt_tokens: Mapped[int | None]
+    output_tokens: Mapped[int | None]
+    # Wall-clock time of the call as the worker saw it, queueing inside Ollama included.
+    wall_ms: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class DeadLetter(Base):
+    """A message, or one product of a message, that won't succeed by retrying. The row is written before the
+    message goes to the DLQ, so it records why; `sent_at` says the DLQ send happened."""
+
+    __tablename__ = "dead_letters"
+    __table_args__ = (
+        # A product has at most one open dead letter per queue, so a redelivered message doesn't dead-letter it twice.
+        Index("dead_letters_open_product", "queue", "product_id", unique=True,
+              postgresql_where=text("redriven_at IS NULL AND product_id IS NOT NULL")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    # The work queue it failed on ("enrich" or "index"), not the DLQ's name.
+    queue: Mapped[str] = mapped_column(String(32))
+    # NULL when a whole message failed (for example it didn't parse).
+    product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id"))
+    error_code: Mapped[str] = mapped_column(String(32))
+    detail: Mapped[str]
+    message_body: Mapped[str]
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    redriven_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
