@@ -35,6 +35,19 @@ services:
       timeout: 5s
       retries: 30
 
+  floci:
+    # Local SQS and S3 (docs/adr/0008). LocalStack needs an account token since 2026.03; Floci doesn't.
+    image: floci/floci:2.3.0
+    environment:
+      # Queues, messages and uploaded feeds survive a container restart.
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - flocidata:/app/data
+
 volumes:
   pgdata:
   osdata:
+  flocidata:
