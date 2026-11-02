@@ -29,6 +29,12 @@ class Product:
         gtin (None | str):
         price (Money):
         attributes (ProductAttributes): Supplier-provided extra columns, as given.
+        color_base (None | str): The supplier's colour in a 16-colour base palette (black, white, gray, brown, beige,
+            red, pink, orange, yellow, green, blue, navy, purple, gold, silver, multicolor).
+        material (None | str):
+        gender (None | str): men, women, unisex or kids.
+        size_system (None | str): US, UK, EU (shoe sizes) or alpha (XS-XXXL, ONE SIZE).
+        size_value (None | str):
         category (Category | None):
     """
 
@@ -41,6 +47,11 @@ class Product:
     gtin: None | str
     price: Money
     attributes: ProductAttributes
+    color_base: None | str
+    material: None | str
+    gender: None | str
+    size_system: None | str
+    size_value: None | str
     category: Category | None
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -68,6 +79,21 @@ class Product:
 
         attributes = self.attributes.to_dict()
 
+        color_base: None | str
+        color_base = self.color_base
+
+        material: None | str
+        material = self.material
+
+        gender: None | str
+        gender = self.gender
+
+        size_system: None | str
+        size_system = self.size_system
+
+        size_value: None | str
+        size_value = self.size_value
+
         category: dict[str, Any] | None
         if isinstance(self.category, Category):
             category = self.category.to_dict()
@@ -87,6 +113,11 @@ class Product:
                 "gtin": gtin,
                 "price": price,
                 "attributes": attributes,
+                "color_base": color_base,
+                "material": material,
+                "gender": gender,
+                "size_system": size_system,
+                "size_value": size_value,
                 "category": category,
             }
         )
@@ -133,6 +164,41 @@ class Product:
 
         attributes = ProductAttributes.from_dict(d.pop("attributes"))
 
+        def _parse_color_base(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        color_base = _parse_color_base(d.pop("color_base"))
+
+        def _parse_material(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        material = _parse_material(d.pop("material"))
+
+        def _parse_gender(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        gender = _parse_gender(d.pop("gender"))
+
+        def _parse_size_system(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        size_system = _parse_size_system(d.pop("size_system"))
+
+        def _parse_size_value(data: object) -> None | str:
+            if data is None:
+                return data
+            return cast(None | str, data)
+
+        size_value = _parse_size_value(d.pop("size_value"))
+
         def _parse_category(data: object) -> Category | None:
             if data is None:
                 return data
@@ -158,6 +224,11 @@ class Product:
             gtin=gtin,
             price=price,
             attributes=attributes,
+            color_base=color_base,
+            material=material,
+            gender=gender,
+            size_system=size_system,
+            size_value=size_value,
             category=category,
         )
 

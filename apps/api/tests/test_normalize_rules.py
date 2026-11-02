@@ -2,8 +2,16 @@ from decimal import Decimal
 
 import pytest
 
-from shelfsense_api.normalize import (BASE_COLORS, length_mm, normalize_color, normalize_gender, normalize_material,
-                                      parse_size, shoe_size_eu, typed_attributes)
+from shelfsense_api.normalize import (
+    BASE_COLORS,
+    length_mm,
+    normalize_color,
+    normalize_gender,
+    normalize_material,
+    parse_size,
+    shoe_size_eu,
+    typed_attributes,
+)
 
 
 @pytest.mark.parametrize(("raw", "base"), [

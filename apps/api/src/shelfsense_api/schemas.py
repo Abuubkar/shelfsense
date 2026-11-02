@@ -108,6 +108,11 @@ class Product(BaseModel):
     gtin: str | None
     price: Money
     attributes: dict[str, str]
+    color_base: str | None
+    material: str | None
+    gender: str | None
+    size_system: str | None
+    size_value: str | None
     category: Category | None
 
 

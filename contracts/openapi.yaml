@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Shelfsense
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Marketplace catalog enrichment and search. This file is the source of truth for the HTTP API: the app is
     checked against it with `make contract-check`, and the typed clients are generated from it with
@@ -495,7 +495,8 @@ components:
           type: integer
     Product:
       type: object
-      required: [id, supplier, supplier_sku, title, description, brand, gtin, price, attributes, category]
+      required: [id, supplier, supplier_sku, title, description, brand, gtin, price, attributes, color_base,
+                 material, gender, size_system, size_value, category]
       properties:
         id:
           type: string
@@ -525,6 +526,30 @@ components:
           additionalProperties:
             type: string
           description: Supplier-provided extra columns, as given.
+        color_base:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: The supplier's colour in a 16-colour base palette (black, white, gray, brown, beige, red, pink,
+            orange, yellow, green, blue, navy, purple, gold, silver, multicolor).
+        material:
+          anyOf:
+            - type: string
+            - type: 'null'
+        gender:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: men, women, unisex or kids.
+        size_system:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: US, UK, EU (shoe sizes) or alpha (XS-XXXL, ONE SIZE).
+        size_value:
+          anyOf:
+            - type: string
+            - type: 'null'
         category:
           anyOf:
             - $ref: '#/components/schemas/Category'

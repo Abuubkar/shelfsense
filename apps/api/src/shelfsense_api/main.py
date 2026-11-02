@@ -21,7 +21,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await search.client().close()
 
 
-app = FastAPI(title="Shelfsense", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="Shelfsense", version="0.4.0", lifespan=lifespan)
 app.include_router(graphql_router, prefix="/graphql")
 
 PROBLEM_JSON = "application/problem+json"

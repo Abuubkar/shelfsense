@@ -57,6 +57,11 @@ type Product {
   gtin: String
   price: Money!
   attributes: [Attribute!]!
+  colorBase: String
+  material: String
+  gender: String
+  sizeSystem: String
+  sizeValue: String
   category: Category
 }
 

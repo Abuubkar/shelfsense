@@ -63,7 +63,7 @@ async def product_docs(session: AsyncSession, product_ids: list[uuid.UUID]) -> d
         str(p.id): {
             "product_id": str(p.id), "supplier": supplier, "supplier_sku": p.supplier_sku, "title": p.title,
             "description": p.description, "brand": p.brand, "gtin": p.gtin, "price_minor": p.price_minor,
-            "currency": p.currency, "color": p.attributes_json.get("color"), "size": p.attributes_json.get("size"),
+            "currency": p.currency, "color": p.color_base, "size": p.size_value,
             "category_id": node_id, "category_path": path, "updated_at": p.updated_at.isoformat(), "embedding": v,
         }
         for (p, supplier, node_id, path), v in zip(rows, vectors, strict=True)
