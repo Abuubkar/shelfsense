@@ -148,7 +148,10 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
   afterwards. The chaos products were near-duplicates of the query ("Trail Hiking Boot …"), so they took the
   slots. Radial search with `ef_search` 200 found 9, with 1,000 all 13.
 - **What we did.** `_forcemerge?only_expunge_deletes=true` on the dev index restored all 13 at the default
-  `ef_search`, and the chaos script now does the same after its cleanup.
+  `ef_search`, and the chaos script now does the same after its cleanup. An expunge run right after the delete
+  left the deleted documents in place (the next smoke run found 2 of 13); one run minutes later removed them.
+  Likely cause: OpenSearch retains soft deletes until the global checkpoint advances (synced every 30 s by
+  default). So the script retries the expunge until the index reports no deleted documents.
 - **What it means beyond the script.** Every update is a delete plus an insert in Lucene, and the index worker
   re-indexes products (on redelivery, on every enrichment). The merge policy keeps deletes to a share of the
   index, but recall drops in the meantime. Parked in docs/backlog.md for the slice 6 eval.
