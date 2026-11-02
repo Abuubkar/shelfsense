@@ -1,0 +1,559 @@
+openapi: 3.1.0
+info:
+  title: Shelfsense
+  version: 0.2.0
+  description: |
+    Marketplace catalog enrichment and search. This file is the source of truth for the HTTP API: the app is
+    checked against it with `make contract-check`, and the typed clients are generated from it with
+    `make codegen`.
+
+    **Pagination.** List endpoints use opaque, signed cursors: pass `next_cursor` back as `cursor` with the same
+    filters. A cursor from one query is rejected for another. There are no page numbers or offsets.
+
+    **Search pagination** reads one point-in-time snapshot of the index for all pages of a query, so a product
+    appears exactly once across pages even while the catalog changes. An unused search cursor expires after
+    5 minutes (`cursor_expired`). Offset paging (`from`/`size` past 10,000 results) is not offered.
+
+    **Errors** use RFC 9457 `application/problem+json` with a stable `code`.
+
+    **Money** is `{amount_minor, currency}`: an integer count of the currency's minor unit (cents) and an
+    ISO 4217 code. Never a float.
+servers:
+  - url: http://localhost:8020
+paths:
+  /v1/feeds:import-local:
+    post:
+      operationId: importLocalFeed
+      summary: Import a supplier feed CSV from the API's feed directory
+      description: |
+        Streams the CSV, validates each row, upserts valid rows on (supplier, SKU) only when their content
+        changed, and records invalid rows as rejections with their spreadsheet row number (header = row 1).
+        Importing the same file again changes nothing and returns the same feed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportLocalRequest'
+      responses:
+        '200':
+          description: The import's outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/feeds/{feed_id}/rejections:
+    get:
+      operationId: listFeedRejections
+      summary: Rows of a feed that failed validation, in row order
+      parameters:
+        - $ref: '#/components/parameters/FeedId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of rejections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RejectionPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/products:
+    get:
+      operationId: listProducts
+      summary: Products, oldest first
+      parameters:
+        - name: supplier
+          in: query
+          required: false
+          description: Only this supplier's products (its code).
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          required: false
+          description: Only products in this taxonomy leaf (current taxonomy release).
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of products.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+  /v1/products/{product_id}:
+    get:
+      operationId: getProduct
+      summary: One product with its category
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: The product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/products/{product_id}:enrich:
+    post:
+      operationId: enrichProduct
+      summary: Classify the product into the Google Product Taxonomy now
+      description: |
+        Embeds the product, takes the 15 nearest taxonomy leaves as candidates, and has the local model pick
+        one (or none). Runs synchronously: expect a few seconds.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: The product with its new category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/ModelUnavailable'
+        '504':
+          $ref: '#/components/responses/ModelUnavailable'
+  /v1/search:
+    get:
+      operationId: searchProducts
+      summary: Faceted hybrid search over products
+      description: |
+        Matches products lexically (BM25) or by meaning (embedding similarity), after filters. The first 50 are
+        ranked by a hybrid of both scores and then reranked by a cross-encoder; the rest follow in combined
+        score order. Facet counts cover the whole result set after all filters. Values within one facet are
+        OR'ed; different facets are AND'ed. An empty `q` browses the filtered catalog.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ''
+            maxLength: 200
+        - name: brand
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: color
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: category_id
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: integer
+        - name: price_min
+          in: query
+          required: false
+          description: Lowest price, inclusive, in minor units.
+          schema:
+            type: integer
+            minimum: 0
+        - name: price_max
+          in: query
+          required: false
+          description: Highest price, inclusive, in minor units.
+          schema:
+            type: integer
+            minimum: 0
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 48
+            default: 24
+        - $ref: '#/components/parameters/Cursor'
+        - name: debug
+          in: query
+          required: false
+          description: Add per-stage scores to each item and stage timings to the response. Slower.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: One page of results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '503':
+          $ref: '#/components/responses/SearchUnavailable'
+components:
+  parameters:
+    FeedId:
+      name: feed_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: The previous page's `next_cursor`, with the same filters.
+      schema:
+        type: string
+  responses:
+    InvalidRequest:
+      description: The request is malformed, or its cursor is invalid or expired.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: No such resource.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ModelUnavailable:
+      description: The model could not be reached, timed out, or gave an unusable reply.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SearchUnavailable:
+      description: The search index could not be reached.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details, plus our stable `code`.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          anyOf:
+            - type: string
+            - type: 'null'
+        code:
+          $ref: '#/components/schemas/ProblemCode'
+    ProblemCode:
+      type: string
+      enum: [invalid_request, not_found, invalid_cursor, cursor_expired, model_unavailable, model_timeout,
+             search_unavailable]
+    Money:
+      type: object
+      required: [amount_minor, currency]
+      properties:
+        amount_minor:
+          type: integer
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+    ImportLocalRequest:
+      type: object
+      required: [path, supplier]
+      properties:
+        path:
+          type: string
+          description: A CSV file under the API's feed directory (FEEDS_DIR).
+        supplier:
+          type: string
+          description: The supplier's code; created on first use.
+    ImportResult:
+      type: object
+      required: [feed_id, file_sha256, rows, inserted, updated, unchanged, rejected, rejections]
+      properties:
+        feed_id:
+          type: string
+          format: uuid
+        file_sha256:
+          type: string
+        rows:
+          type: integer
+        inserted:
+          type: integer
+        updated:
+          type: integer
+        unchanged:
+          type: integer
+        rejected:
+          type: integer
+        rejections:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rejection'
+    Rejection:
+      type: object
+      required: [row_number, reason_code, detail, excerpt]
+      properties:
+        row_number:
+          type: integer
+          description: Spreadsheet row number; the header is row 1.
+        reason_code:
+          type: string
+          description: missing_sku, missing_title, invalid_gtin, invalid_price, negative_price, invalid_currency,
+            invalid_encoding, wrong_column_count or duplicate_sku.
+        detail:
+          type: string
+        excerpt:
+          type: string
+    RejectionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rejection'
+        next_cursor:
+          anyOf:
+            - type: string
+            - type: 'null'
+    Category:
+      type: object
+      description: A product's category in one taxonomy release, and how it was decided.
+      required: [taxonomy_version, node_id, full_path, confidence, candidate_ids, model, prompt_version,
+                 prompt_tokens, output_tokens, total_ms]
+      properties:
+        taxonomy_version:
+          type: string
+        node_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          description: Null when no candidate fit.
+        full_path:
+          anyOf:
+            - type: string
+            - type: 'null'
+        confidence:
+          type: number
+          description: The model's probability for the chosen ID, from its token log-probabilities.
+        candidate_ids:
+          type: array
+          items:
+            type: integer
+        model:
+          type: string
+        prompt_version:
+          type: string
+        prompt_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_ms:
+          type: integer
+    Product:
+      type: object
+      required: [id, supplier, supplier_sku, title, description, brand, gtin, price, attributes, category]
+      properties:
+        id:
+          type: string
+          format: uuid
+        supplier:
+          type: string
+        supplier_sku:
+          type: string
+        title:
+          type: string
+        description:
+          anyOf:
+            - type: string
+            - type: 'null'
+        brand:
+          anyOf:
+            - type: string
+            - type: 'null'
+        gtin:
+          anyOf:
+            - type: string
+            - type: 'null'
+        price:
+          $ref: '#/components/schemas/Money'
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          description: Supplier-provided extra columns, as given.
+        category:
+          anyOf:
+            - $ref: '#/components/schemas/Category'
+            - type: 'null'
+    ProductPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        next_cursor:
+          anyOf:
+            - type: string
+            - type: 'null'
+    SearchItem:
+      type: object
+      required: [id, rank, title, brand, price, color, size, category_id, category_path]
+      properties:
+        id:
+          type: string
+          format: uuid
+        rank:
+          type: integer
+          description: 1-based position in the whole result set.
+        title:
+          type: string
+        brand:
+          anyOf:
+            - type: string
+            - type: 'null'
+        price:
+          $ref: '#/components/schemas/Money'
+        color:
+          anyOf:
+            - type: string
+            - type: 'null'
+        size:
+          anyOf:
+            - type: string
+            - type: 'null'
+        category_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        category_path:
+          anyOf:
+            - type: string
+            - type: 'null'
+        debug:
+          anyOf:
+            - $ref: '#/components/schemas/SearchItemDebug'
+            - type: 'null'
+    SearchItemDebug:
+      type: object
+      required: [stage, scores]
+      properties:
+        stage:
+          type: string
+          enum: [head, tail]
+          description: head = hybrid-ranked and reranked (the first 50); tail = the rest, by combined score.
+        scores:
+          type: object
+          description: |
+            Per-stage scores. Head: bm25 and knn (raw), bm25_normalized and knn_normalized, hybrid (their
+            weighted mean), rerank (cross-encoder). Tail: bm25, knn, tail (their sum). A stage that didn't
+            match the product is absent. Only head items on the first page, or any page with debug, carry the
+            head scores.
+          additionalProperties:
+            type: number
+    FacetValue:
+      type: object
+      required: [value, label, count]
+      properties:
+        value:
+          type: string
+          description: |
+            What to pass back as the filter. For price it's `<from>-<to>` in minor units with `to` exclusive
+            (either side may be empty): send `price_min=<from>` and `price_max=<to - 1>`.
+        label:
+          type: string
+        count:
+          type: integer
+    Facet:
+      type: object
+      required: [name, values]
+      properties:
+        name:
+          type: string
+          enum: [brand, color, category_id, price]
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetValue'
+    SearchDebug:
+      type: object
+      required: [timings_ms, head_size, hybrid_weights, knn_min_score]
+      properties:
+        timings_ms:
+          type: object
+          additionalProperties:
+            type: integer
+        head_size:
+          type: integer
+        hybrid_weights:
+          type: array
+          items:
+            type: number
+        knn_min_score:
+          type: number
+    SearchResponse:
+      type: object
+      required: [items, total, facets, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchItem'
+        total:
+          type: integer
+          description: Products in the whole result set.
+        facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Facet'
+        next_cursor:
+          anyOf:
+            - type: string
+            - type: 'null'
+        debug:
+          anyOf:
+            - $ref: '#/components/schemas/SearchDebug'
+            - type: 'null'
