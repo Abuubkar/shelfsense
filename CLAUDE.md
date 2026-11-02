@@ -6,6 +6,7 @@ Marketplace catalog enrichment and search: messy supplier feeds in, classified p
 - **The slice plan:** [03-shelfsense.md](03-shelfsense.md).
 - **Where it's heading:** [docs/architecture.md](docs/architecture.md). A destination, not a to-do list.
 - **Why things are the way they are:** [docs/adr/](docs/adr/). Add one for every real choice.
+- **How schema and taxonomy changes ship:** [docs/migrations.md](docs/migrations.md) (deploy order, rollback).
 - **What went wrong before:** [docs/challenges.md](docs/challenges.md). Each slice adds what it hit.
 - **Known but parked:** [docs/backlog.md](docs/backlog.md).
 
@@ -26,6 +27,11 @@ curl -X POST "localhost:8020/v1/products/${id}:enrich"   # one product now; brac
 uv run python scripts/sync_index.py          # full rebuild of the index from Postgres (fresh setup or repair)
 curl "localhost:8020/v1/search?q=hiking%20boots&debug=true"
 curl -X POST localhost:8020/v1/admin/dlq/enrich/redrive -H 'content-type: application/json' -d '{}'  # dry run
+uv run uvicorn shelfsense_supplier_mock:app --port 8030                       # drifting supplier API
+uv run python scripts/import_supplier.py ridgeway http://localhost:8030 --verify   # exact import, resumable
+uv run python scripts/seed.py --profile small|large [--feed [--commit-feed]] [--reset]  # 5k / 200k from ground truth
+uv run python scripts/taxonomy_upgrade.py <release file> [--status|--reindex]  # docs/migrations.md B
+uv run python -u scripts/search_loop.py      # keeps reading through the API during a migration; counts errors
 make smoke                                   # 5 searches + deep paging + GraphQL, via the generated client
 make test                                    # unit tests, offline
 make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)
@@ -75,6 +81,15 @@ make contract-check                          # oasdiff: the code's spec vs contr
   misread bumps `schema_version`. `contracts/messages/` is generated from them.
 - SQS and S3 go through `aws.py` (one client setup, endpoint from settings). Queue names can't contain dots;
   DLQs are `<queue>-dlq`.
+- Product attributes: raw supplier pairs live in `product_attributes`; the facet columns (`color_base`, `material`,
+  `gender`, `size_system`, `size_value`) are derived by `normalize.typed_attributes` in `feeds.upsert_rows`, the one
+  write path for products (feeds, supplier APIs, seeds). Never write products another way.
+- Schema changes on big tables are expand/contract with batched, resumable backfills outside migrations, and
+  `lock_timeout` on DDL (docs/migrations.md). A migration never both adds and removes something code uses.
+- Supplier API imports go through `supplier_import.import_supplier`: overlapping pages + reconciliation by the
+  supplier's own `updated_at` on v1, snapshot on v2, progress saved per page (ADR 0011).
+- Taxonomy releases sit side by side; an upgrade remaps by SQL and reclassifies only split/deleted nodes into the
+  new release before `TAXONOMY_VERSION` switches (ADR 0013). `classify_product` takes the release to use.
 - Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;
