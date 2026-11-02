@@ -84,20 +84,28 @@ async def commit_feed(session: AsyncSession, feed_id: uuid.UUID) -> schemas.Impo
                         f.write(chunk)
                 result = await feeds.import_file(session, path, feed_id, feed.supplier_id)
 
-            to_enrich: list[uuid.UUID] = []
-            for start in range(0, len(result.product_ids), 5000):
-                to_enrich += await needs_enrichment(session, result.product_ids[start:start + 5000])
-            batch = settings.enrich_batch_size
-            await aws.send(sqs, settings.enrich_queue, [
-                EnrichRequest(product_ids=to_enrich[i:i + batch], feed_id=feed_id).model_dump_json()
-                for i in range(0, len(to_enrich), batch)
-            ])
+            enqueued = await enqueue_enrichment(session, sqs, result.product_ids, feed_id)
     return schemas.ImportResult(
         **{k: v for k, v in result.__dict__.items() if k not in ("rejections", "product_ids")},
         rejected=len(result.rejections),
-        enqueued=len(to_enrich),
+        enqueued=enqueued,
         rejections=[schemas.Rejection(**r.__dict__) for r in result.rejections],
     )
+
+
+async def enqueue_enrichment(session: AsyncSession, sqs: Any, product_ids: list[uuid.UUID],
+                             feed_id: uuid.UUID | None = None) -> int:
+    """Queue the products that aren't enriched for their current content, in messages of enrich_batch_size.
+    Returns how many were queued."""
+    to_enrich: list[uuid.UUID] = []
+    for start in range(0, len(product_ids), 5000):
+        to_enrich += await needs_enrichment(session, product_ids[start:start + 5000])
+    batch = settings.enrich_batch_size
+    await aws.send(sqs, settings.enrich_queue, [
+        EnrichRequest(product_ids=to_enrich[i:i + batch], feed_id=feed_id).model_dump_json()
+        for i in range(0, len(to_enrich), batch)
+    ])
+    return len(to_enrich)
 
 
 async def _check_backlog(session: AsyncSession, sqs: Any) -> None:

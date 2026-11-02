@@ -9,11 +9,12 @@ dependencies = ["shelfsense-api", "shelfsense-worker-enrich", "shelfsense-worker
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "apps/worker_enrich", "apps/worker_index", "packages/clients/python"]
+members = ["apps/api", "apps/supplier_mock", "apps/worker_enrich", "apps/worker_index", "packages/clients/python"]
 
 [tool.uv.sources]
 shelfsense-api = { workspace = true }
 shelfsense-client = { workspace = true }
+shelfsense-supplier-mock = { workspace = true }
 shelfsense-worker-enrich = { workspace = true }
 shelfsense-worker-index = { workspace = true }
 
@@ -28,6 +29,7 @@ dev = [
     "pyarrow>=26.0.0",
     "pytest>=9.2.0",
     "shelfsense-client",
+    "shelfsense-supplier-mock",
     "testcontainers>=4.15.0",
 ]
 
@@ -42,4 +44,4 @@ extend-exclude = ["packages/clients/python"]
 select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["shelfsense_api", "shelfsense_client", "shelfsense_worker_enrich", "shelfsense_worker_index"]
+known-first-party = ["shelfsense_api", "shelfsense_client", "shelfsense_supplier_mock", "shelfsense_worker_enrich", "shelfsense_worker_index"]

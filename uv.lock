@@ -11,6 +11,7 @@ members = [
     "shelfsense",
     "shelfsense-api",
     "shelfsense-client",
+    "shelfsense-supplier-mock",
     "shelfsense-worker-enrich",
     "shelfsense-worker-index",
 ]
@@ -2005,6 +2006,7 @@ dev = [
     { name = "pyarrow" },
     { name = "pytest" },
     { name = "shelfsense-client" },
+    { name = "shelfsense-supplier-mock" },
     { name = "testcontainers" },
 ]
 
@@ -2021,6 +2023,7 @@ dev = [
     { name = "pyarrow", specifier = ">=26.0.0" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "shelfsense-client", editable = "packages/clients/python" },
+    { name = "shelfsense-supplier-mock", editable = "apps/supplier_mock" },
     { name = "testcontainers", specifier = ">=4.15.0" },
 ]
 
@@ -2063,7 +2066,7 @@ requires-dist = [
 
 [[package]]
 name = "shelfsense-client"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "packages/clients/python" }
 dependencies = [
     { name = "attrs" },
@@ -2074,6 +2077,21 @@ dependencies = [
 requires-dist = [
     { name = "attrs", specifier = ">=22.2.0" },
     { name = "httpx", specifier = ">=0.23.1,<0.29.0" },
+]
+
+[[package]]
+name = "shelfsense-supplier-mock"
+version = "0.1.0"
+source = { editable = "apps/supplier_mock" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.162.0" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 
 [[package]]
