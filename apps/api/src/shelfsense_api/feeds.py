@@ -15,7 +15,7 @@ from sqlalchemy import literal_column, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api.db import FeedRejection, Product, Supplier
+from shelfsense_api.db import Feed, FeedRejection, Product, Supplier
 
 # Columns with a place on the product; any other column is kept as-is in attributes_json.
 PRODUCT_COLUMNS = ("sku", "title", "description", "brand", "gtin", "price", "currency")
@@ -130,6 +130,7 @@ def validate_row(row_number: int, header: list[str], values: list[str]) -> FeedR
 @dataclass
 class ImportResult:
     file_sha256: str
+    feed_id: Any = None
     rows: int = 0
     inserted: int = 0
     updated: int = 0
@@ -166,12 +167,24 @@ async def import_file(session: AsyncSession, path: Path, supplier_code: str) -> 
     if batch:
         await _upsert(session, supplier_id, batch, result)
 
+    # The same bytes always give the same counts, so updating them on a re-import changes nothing; it only
+    # corrects feeds backfilled by migration 0002, whose row counts weren't known.
+    feed = insert(Feed).values(supplier_id=supplier_id, file_name=path.name, file_sha256=result.file_sha256,
+                               row_count=result.rows, rejected_count=len(result.rejections))
+    feed = feed.on_conflict_do_update(
+        index_elements=["supplier_id", "file_sha256"],
+        set_={"row_count": feed.excluded.row_count, "rejected_count": feed.excluded.rejected_count},
+        where=(Feed.row_count != feed.excluded.row_count) | (Feed.rejected_count != feed.excluded.rejected_count),
+    )
+    await session.execute(feed)
+    result.feed_id = await session.scalar(
+        select(Feed.id).where(Feed.supplier_id == supplier_id, Feed.file_sha256 == result.file_sha256)
+    )
     if result.rejections:
         await session.execute(
             insert(FeedRejection)
-            .values([{"supplier_id": supplier_id, "file_name": path.name, "file_sha256": result.file_sha256,
-                      **r.__dict__} for r in result.rejections])
-            .on_conflict_do_nothing(index_elements=["file_sha256", "row_number"])
+            .values([{"feed_id": result.feed_id, **r.__dict__} for r in result.rejections])
+            .on_conflict_do_nothing(index_elements=["feed_id", "row_number"])
         )
     await session.commit()
     return result

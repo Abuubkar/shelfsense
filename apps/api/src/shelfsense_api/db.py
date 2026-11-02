@@ -61,17 +61,30 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class FeedRejection(Base):
-    """A feed row that failed validation. Keyed on the file's content hash, so re-importing the same file adds
-    nothing."""
+class Feed(Base):
+    """One distinct feed file from one supplier, known by its content hash: importing the same bytes again finds
+    this row instead of making a new one."""
 
-    __tablename__ = "feed_rejections"
-    __table_args__ = (UniqueConstraint("file_sha256", "row_number"),)
+    __tablename__ = "feeds"
+    __table_args__ = (UniqueConstraint("supplier_id", "file_sha256"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
     supplier_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("suppliers.id"))
     file_name: Mapped[str]
     file_sha256: Mapped[str] = mapped_column(String(64))
+    row_count: Mapped[int]
+    rejected_count: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FeedRejection(Base):
+    """A feed row that failed validation."""
+
+    __tablename__ = "feed_rejections"
+    __table_args__ = (UniqueConstraint("feed_id", "row_number"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    feed_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("feeds.id"))
     # Spreadsheet-style: the header is row 1, so the first product is row 2.
     row_number: Mapped[int]
     reason_code: Mapped[str] = mapped_column(String(32))
