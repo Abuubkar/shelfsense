@@ -1,0 +1,45 @@
+{
+  "name": "shelfsense-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shelfsense storefront search (slice 5b): Next.js App Router",
+  "scripts": {
+    "dev": "next dev --port 3020",
+    "build": "next build",
+    "start": "next start --port 3020",
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "codegen": "openapi-typescript ../../contracts/openapi.yaml -o src/lib/api-types.ts && graphql-codegen --config codegen.ts"
+  },
+  "packageManager": "pnpm@11.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "next": "16.4.3",
+    "openapi-fetch": "0.17.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "7.4.6",
+    "@graphql-codegen/client-preset": "6.2.3",
+    "@graphql-typed-document-node/core": "3.2.0",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/jest": "30.0.0",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "graphql": "17.0.2",
+    "jest": "30.5.2",
+    "jest-environment-jsdom": "30.5.2",
+    "jest-fixed-jsdom": "0.0.11",
+    "msw": "2.15.0",
+    "openapi-typescript": "7.13.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3"
+  }
+}

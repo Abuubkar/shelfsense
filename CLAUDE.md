@@ -35,11 +35,13 @@ uv run python scripts/taxonomy_upgrade.py <release file> [--status|--reindex]  #
 uv run python -u scripts/search_loop.py      # keeps reading through the API during a migration; counts errors
 uv run python scripts/attributes_report.py --sample 20 [--enqueue]   # extracted attributes, evidence, accuracy
 uv run python scripts/query_demo.py [--fresh]  # 10 natural-language queries: parse source, filters, results
+make web                                     # the storefront on :3020 (Next.js; needs the API on :8020)
+make web-test                                # Jest + typecheck for apps/web
 make smoke                                   # 5 searches + deep paging + GraphQL, via the generated client
 make test                                    # unit tests, offline
 make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)
 make test-int                                # service tests on Postgres, OpenSearch and Floci containers (~3 min)
-make codegen                                 # after changing contracts/openapi.yaml, GraphQL types or messages.py
+make codegen                                 # after changing contracts, GraphQL types or messages.py (also apps/web's types)
 make contract-check                          # oasdiff: the code's spec vs contracts/openapi.yaml
 ```
 
@@ -97,6 +99,11 @@ make contract-check                          # oasdiff: the code's spec vs contr
   supplier's own `updated_at` on v1, snapshot on v2, progress saved per page (ADR 0011).
 - Taxonomy releases sit side by side; an upgrade remaps by SQL and reclassifies only split/deleted nodes into the
   new release before `TAXONOMY_VERSION` switches (ADR 0013). `classify_product` takes the release to use.
+- apps/web (ADR 0016): the search page's state is its URL; REST goes through `src/lib/api.ts` (openapi-fetch, types
+  from `contracts/openapi.yaml`), GraphQL through `src/lib/graphql.ts` with codegen-typed documents. Both are
+  generated: `make codegen`, never edit `src/lib/api-types.ts` or `src/gql/`. Money is shown with `formatMoney`
+  (BigInt, mirrors `money.py`, fixtures in `contracts/fixtures/money.json`); evidence offsets are code points
+  (`src/lib/evidence.ts`). The browser calls `/api/*` on its own origin; Next forwards it to the API.
 - Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;

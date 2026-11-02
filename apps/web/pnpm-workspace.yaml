@@ -1,0 +1,5 @@
+# Install scripts stay off: msw's copies a browser service worker (tests run in Node), @parcel/watcher is an
+# optional file watcher for codegen.
+allowBuilds:
+  '@parcel/watcher': false
+  msw: false

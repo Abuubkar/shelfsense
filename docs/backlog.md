@@ -57,3 +57,12 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   the response's facet-name enum is a contract change; do it with the UI in slice 5b if a concept needs them.
 - **Enrichment ~6.5 s per product** (slice 5a). Generating the attribute JSON dominates. Shorter keys, dropping
   `unit` for non-lengths, or logprobs only on the category token would cut output and time; measure with the eval.
+- **Editable parsed filters** (slice 5b). The storefront shows "From your search" read-only. Removing one needs the
+  API to take gender, size, materials and exclusions as explicit parameters (prototype B rebuilt the query text
+  instead). Add them to `/v1/search` and the facets if shoppers ask to undo a parse.
+- **Search-as-you-type** (slice 5b). Prototype E showed typeahead works without the model (`parse=false`, ~30 ms);
+  a `/v1/suggest` endpoint with query suggestions would make it a real feature.
+- **Mobile filter tray** (slice 5b). The sidebar stacks above results under 760 px; prototype H's bottom-sheet tray
+  with a live result count is the better phone design.
+- **GraphQL `Money.amountMinor` is a 32-bit Int** (slice 5b). Amounts above $21,474,836.47 overflow GraphQL's Int.
+  Switch to a string or a custom scalar before high-value catalogs.
