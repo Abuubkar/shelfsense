@@ -10,11 +10,16 @@ import ollama
 
 from shelfsense_api.settings import settings
 
+# Failures that may go away by themselves: worth retrying later. The rest need a different input or prompt.
+TRANSIENT_CODES = frozenset({"model_timeout", "model_unavailable"})
+
 
 class ModelError(Exception):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, content: str | None = None):
         super().__init__(message)
         self.code = code
+        # The reply text, when the model did reply (an invalid reply is shown back to it on a retry).
+        self.content = content
 
 
 @dataclass
@@ -30,13 +35,17 @@ class ModelReply:
     eval_ms: int
 
 
-async def chat_json(system: str, user: str, schema: dict[str, Any]) -> ModelReply:
+async def chat_json(system: str, user: str, schema: dict[str, Any],
+                    follow_up: list[dict[str, str]] | None = None) -> ModelReply:
+    """One constrained chat call. `follow_up` continues the conversation after `user`, e.g. the model's rejected
+    reply and the reason it was rejected."""
     client = ollama.AsyncClient(host=settings.ollama_host)
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}, *(follow_up or [])]
     try:
         async with asyncio.timeout(settings.llm_timeout_s):
             response = await client.chat(
                 model=settings.llm_model,
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                messages=messages,
                 format=schema,
                 logprobs=True,
                 options={"temperature": settings.llm_temperature, "num_ctx": settings.llm_num_ctx},
@@ -44,7 +53,11 @@ async def chat_json(system: str, user: str, schema: dict[str, Any]) -> ModelRepl
             )
     except TimeoutError:
         raise ModelError("model_timeout", f"no reply within {settings.llm_timeout_s:.0f}s") from None
-    except (ConnectionError, ollama.ResponseError) as exc:
+    except ollama.ResponseError as exc:
+        # 5xx (Ollama overloaded or crashed) may pass; a 4xx (unknown model, bad request) won't.
+        code = "model_unavailable" if exc.status_code >= 500 else "model_request_rejected"
+        raise ModelError(code, f"{exc.status_code}: {exc.error}") from exc
+    except ConnectionError as exc:
         raise ModelError("model_unavailable", str(exc)) from exc
 
     prompt_tokens = response.prompt_eval_count or 0
@@ -53,10 +66,11 @@ async def chat_json(system: str, user: str, schema: dict[str, Any]) -> ModelRepl
         raise ModelError("prompt_truncated", f"prompt filled num_ctx {settings.llm_num_ctx}")
     if response.done_reason == "length":
         raise ModelError("output_truncated", "the model hit its output limit")
+    content = response.message.content or ""
     try:
-        answer = json.loads(response.message.content or "")
+        answer = json.loads(content)
     except ValueError as exc:
-        raise ModelError("invalid_model_output", str(exc)) from exc
+        raise ModelError("invalid_model_output", f"reply is not JSON: {exc}", content) from exc
 
     return ModelReply(
         answer=answer,

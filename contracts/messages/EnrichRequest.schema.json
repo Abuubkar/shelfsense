@@ -1,0 +1,44 @@
+{
+  "description": "Classify these products. Sent by a feed commit, and by the enrich worker to resubmit transient failures.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "product_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Product Ids",
+      "type": "array"
+    },
+    "attempt": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "feed_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Feed Id"
+    }
+  },
+  "required": [
+    "product_ids"
+  ],
+  "title": "EnrichRequest",
+  "type": "object"
+}

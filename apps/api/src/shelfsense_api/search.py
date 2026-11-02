@@ -13,13 +13,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from opensearchpy import AsyncOpenSearch, NotFoundError
-from opensearchpy.helpers import async_bulk
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from shelfsense_api import cursor
-from shelfsense_api.db import Product, ProductCategory, Supplier, TaxonomyNode
-from shelfsense_api.embeddings import embed_passages, embed_query, product_text, rerank
+from shelfsense_api.embeddings import embed_query, rerank
 from shelfsense_api.settings import settings
 
 INDEX = "products_v1"
@@ -97,33 +93,6 @@ async def ensure_index(os: AsyncOpenSearch) -> None:
     await os.indices.put_index_template(name=INDEX, body=INDEX_TEMPLATE)
     if not await os.indices.exists(index=INDEX):
         await os.indices.create(index=INDEX)
-
-
-async def index_products(os: AsyncOpenSearch, session: AsyncSession) -> tuple[int, list[dict[str, Any]]]:
-    """Index every product from Postgres, with its category in the current taxonomy release. Returns the count
-    indexed and the per-item errors (a bulk request can partly fail)."""
-    rows = (await session.execute(
-        select(Product, Supplier.code, ProductCategory.node_id, TaxonomyNode.full_path)
-        .join(Supplier, Supplier.id == Product.supplier_id)
-        .outerjoin(ProductCategory, (ProductCategory.product_id == Product.id)
-                   & (ProductCategory.taxonomy_version == settings.taxonomy_version))
-        .outerjoin(TaxonomyNode, (TaxonomyNode.version == ProductCategory.taxonomy_version)
-                   & (TaxonomyNode.node_id == ProductCategory.node_id))
-        .order_by(Product.id)
-    )).all()
-    texts = [product_text(p.title, p.brand, p.description) for p, *_ in rows]
-    vectors = await asyncio.to_thread(embed_passages, texts)
-    actions = [
-        {"_index": ALIAS, "_id": str(p.id), "_source": {
-            "product_id": str(p.id), "supplier": supplier, "supplier_sku": p.supplier_sku, "title": p.title,
-            "description": p.description, "brand": p.brand, "gtin": p.gtin, "price_minor": p.price_minor,
-            "currency": p.currency, "color": p.attributes_json.get("color"), "size": p.attributes_json.get("size"),
-            "category_id": node_id, "category_path": path, "updated_at": p.updated_at.isoformat(), "embedding": v,
-        }}
-        for (p, supplier, node_id, path), v in zip(rows, vectors, strict=True)
-    ]
-    indexed, errors = await async_bulk(os, actions, raise_on_error=False, refresh="wait_for")
-    return indexed, list(errors) if isinstance(errors, list) else []
 
 
 @dataclass(frozen=True)
