@@ -50,3 +50,9 @@ def test_only_the_first_grounded_attribute_of_a_name_is_kept() -> None:
     fields = {"title": "Black and white sneaker", "description": "", "brand": "", "raw_attributes": "(none)"}
     result = ground([attr("color", "black", "Black"), attr("color", "white", "white")], fields)
     assert [(a.value, a.evidence_start, a.evidence_end) for a in result.attributes] == [("black", 0, 5)]
+
+
+def test_quotes_from_supplier_attributes_are_read_without_their_name() -> None:
+    fields = {"title": "Tee", "description": "", "brand": "", "raw_attributes": "gender: Women's; sex: U; sz: S"}
+    result = ground([attr("gender", "women", "gender: Women's", field="raw_attributes")], fields)
+    assert [(a.value, a.evidence_text) for a in result.attributes] == [("women", "gender: Women's")]

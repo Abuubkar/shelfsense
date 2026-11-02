@@ -85,7 +85,7 @@ def normalize_color(raw: str | None) -> str | None:
     -> gray. None when no word in it is a known colour."""
     if not raw:
         return None
-    for word in re.split(r"[\s/,&+\-|]+", raw.lower()):
+    for word in re.split(r"[^a-z]+", raw.lower()):  # any non-letter separates: "Colour: orange." -> orange
         if word in _COLOR_WORDS:
             return _COLOR_WORDS[word]
     return None
