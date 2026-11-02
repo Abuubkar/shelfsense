@@ -67,3 +67,14 @@ def test_empty_query_browses_the_filtered_catalog() -> None:
 def test_tail_excludes_the_head() -> None:
     query = match_set("boots", [0.1], Filters(), exclude=["a", "b"])["bool"]
     assert query["must_not"] == [{"ids": {"values": ["a", "b"]}}]
+
+
+def test_the_result_sets_semantic_side_filters_inside_the_knn_query() -> None:
+    """Totals, facets and the tail come from this query; filtering only after an approximate k-NN search
+    undercounted against the head (4 vs 7 for one query)."""
+    from shelfsense_api.search import Filters, match_set
+
+    query = match_set("boots", [0.1] * 384, Filters(color=("black",), gender=("women", "unisex")))
+    knn = query["bool"]["should"][1]["knn"]["embedding"]
+    assert knn["filter"] == {"bool": {"filter": [{"terms": {"color": ["black"]}}, {"terms": {"gender": ["unisex", "women"]}}]}}
+    assert query["bool"]["filter"] == knn["filter"]["bool"]["filter"]  # the lexical side is filtered the same
