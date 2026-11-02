@@ -141,6 +141,12 @@ class ImportResult:
     # Every valid row's product, changed or not.
     product_ids: list[uuid.UUID] = field(default_factory=list)
 
+    def add(self, upserted: "Upserted") -> None:
+        self.inserted += upserted.inserted
+        self.updated += upserted.updated
+        self.unchanged += upserted.unchanged
+        self.product_ids += upserted.product_ids
+
 
 async def import_file(session: AsyncSession, path: Path, feed_id: uuid.UUID, supplier_id: uuid.UUID) -> ImportResult:
     """Stream a feed CSV into products. Valid rows are upserted on (supplier, SKU) only when their content hash
@@ -165,10 +171,10 @@ async def import_file(session: AsyncSession, path: Path, feed_id: uuid.UUID, sup
             seen_skus.add(outcome.sku)
             batch.append(outcome)
             if len(batch) == UPSERT_BATCH:
-                await _upsert(session, supplier_id, batch, result)
+                result.add(await upsert_rows(session, supplier_id, batch))
                 batch = []
     if batch:
-        await _upsert(session, supplier_id, batch, result)
+        result.add(await upsert_rows(session, supplier_id, batch))
 
     # A recommit computes the same values, so this only changes anything the first time.
     await session.execute(update(Feed).where(Feed.id == feed_id).values(
@@ -193,7 +199,19 @@ async def ensure_supplier(session: AsyncSession, code: str) -> uuid.UUID:
     return found
 
 
-async def _upsert(session: AsyncSession, supplier_id: Any, batch: list[FeedRow], result: ImportResult) -> None:
+@dataclass
+class Upserted:
+    inserted: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    # Every row's product, changed or not.
+    product_ids: list[uuid.UUID] = field(default_factory=list)
+
+
+async def upsert_rows(session: AsyncSession, supplier_id: uuid.UUID, batch: list[FeedRow]) -> Upserted:
+    """Write valid rows of one supplier: insert new SKUs, update ones whose content hash changed, leave the rest.
+    The one write path for products, from feed files and supplier APIs alike."""
+    result = Upserted()
     rows = [
         {"supplier_id": supplier_id, "supplier_sku": r.sku, "title": r.title, "description": r.description,
          "brand": r.brand, "gtin": r.gtin, "price_minor": r.price_minor, "currency": r.currency,
@@ -223,6 +241,7 @@ async def _upsert(session: AsyncSession, supplier_id: Any, batch: list[FeedRow],
     result.product_ids += await session.scalars(
         select(Product.id).where(Product.supplier_id == supplier_id, Product.supplier_sku.in_([r.sku for r in batch]))
     )
+    return result
 
 
 def _excerpt(values: list[str]) -> str:

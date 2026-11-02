@@ -220,9 +220,10 @@ class ImportState(Base):
     base_url: Mapped[str]
     # "v2" with a snapshot token when the supplier offers one, else "v1" (offset paging that drifts).
     api_version: Mapped[str] = mapped_column(String(8))
-    # "running", "done" or "failed".
+    # "scanning", "reconciling" or "done"; `error` says why the last run stopped, if it failed.
     status: Mapped[str] = mapped_column(String(16))
-    # When this scan started: on v1, everything updated since then is re-read from the top at the end.
+    # The newest updated_at on the scan's first page, in the supplier's clock: on v1, everything updated after it
+    # is re-read from the top at the end.
     scan_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     next_offset: Mapped[int] = mapped_column(server_default=text("0"))
     # v1: the SKUs of the last page read, to find where it went if the pages shifted.
