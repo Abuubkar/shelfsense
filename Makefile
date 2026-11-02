@@ -1,6 +1,6 @@
 TAXONOMY_URL := https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt
 
-.PHONY: taxonomy test test-int codegen contract-check smoke
+.PHONY: taxonomy test test-int codegen contract-check smoke chaos
 
 # Download the official Google Product Taxonomy (with IDs) as data/taxonomy/<version>.txt plus its checksum.
 # The version comes from the file's own header. Never fetched at runtime; scripts/load_taxonomy.py reads the file.
@@ -15,13 +15,18 @@ taxonomy:
 test:
 	uv run pytest -m "not integration"
 
-# Service tests on real Postgres and OpenSearch containers (needs Docker).
+# Service tests on real Postgres, OpenSearch and Floci containers (needs Docker).
 test-int:
 	uv run pytest -m integration
 
 # End to end through the generated client; needs the API on :8020 with products indexed.
 smoke:
 	uv run python scripts/smoke.py
+
+# Slice 3's Done-when: a 2,000-product feed through the queues with failing model, OpenSearch and a killed worker.
+# Starts its own API and workers on fresh queues; needs docker compose up and migrations, not Ollama.
+chaos:
+	uv run python -u scripts/chaos.py
 
 OASDIFF := docker run --rm -v $(CURDIR):/specs:ro tufin/oasdiff:v1.35.0
 
