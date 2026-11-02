@@ -47,6 +47,19 @@ services:
     volumes:
       - flocidata:/app/data
 
+  redis:
+    # Query-parse cache (docs/adr/0014). Nothing is persisted: a lost cache only costs model calls.
+    image: redis:8.6.8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb",
+              "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6380:6379"  # 6379 is Pagerwise's Redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
 volumes:
   pgdata:
   osdata:
