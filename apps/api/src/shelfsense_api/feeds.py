@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import literal_column, select
+from sqlalchemy import func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,20 +130,21 @@ def validate_row(row_number: int, header: list[str], values: list[str]) -> FeedR
 
 @dataclass
 class ImportResult:
+    feed_id: uuid.UUID
     file_sha256: str
-    feed_id: Any = None
     rows: int = 0
     inserted: int = 0
     updated: int = 0
     unchanged: int = 0
     rejections: list[Rejection] = field(default_factory=list)
+    # Every valid row's product, changed or not.
+    product_ids: list[uuid.UUID] = field(default_factory=list)
 
 
-async def import_file(session: AsyncSession, path: Path, supplier_code: str) -> ImportResult:
+async def import_file(session: AsyncSession, path: Path, feed_id: uuid.UUID, supplier_id: uuid.UUID) -> ImportResult:
     """Stream a feed CSV into products. Valid rows are upserted on (supplier, SKU) only when their content hash
-    changed; invalid rows go to feed_rejections. Importing the same file twice changes nothing."""
-    supplier_id = await _supplier_id(session, supplier_code)
-    result = ImportResult(file_sha256=_sha256(path))
+    changed; invalid rows go to feed_rejections. Importing the same feed twice changes nothing."""
+    result = ImportResult(feed_id=feed_id, file_sha256=_sha256(path))
     seen_skus: set[str] = set()
     batch: list[FeedRow] = []
 
@@ -167,32 +169,27 @@ async def import_file(session: AsyncSession, path: Path, supplier_code: str) -> 
     if batch:
         await _upsert(session, supplier_id, batch, result)
 
-    # The same bytes always give the same counts, so updating them on a re-import changes nothing; it only
-    # corrects feeds backfilled by migration 0002, whose row counts weren't known.
-    feed = insert(Feed).values(supplier_id=supplier_id, file_name=path.name, file_sha256=result.file_sha256,
-                               row_count=result.rows, rejected_count=len(result.rejections))
-    feed = feed.on_conflict_do_update(
-        index_elements=["supplier_id", "file_sha256"],
-        set_={"row_count": feed.excluded.row_count, "rejected_count": feed.excluded.rejected_count},
-        where=(Feed.row_count != feed.excluded.row_count) | (Feed.rejected_count != feed.excluded.rejected_count),
-    )
-    await session.execute(feed)
-    result.feed_id = await session.scalar(
-        select(Feed.id).where(Feed.supplier_id == supplier_id, Feed.file_sha256 == result.file_sha256)
-    )
+    # A recommit computes the same values, so this only changes anything the first time.
+    await session.execute(update(Feed).where(Feed.id == feed_id).values(
+        file_sha256=result.file_sha256, row_count=result.rows, rejected_count=len(result.rejections),
+        committed_at=func.coalesce(Feed.committed_at, func.now()),
+    ))
     if result.rejections:
         await session.execute(
             insert(FeedRejection)
-            .values([{"feed_id": result.feed_id, **r.__dict__} for r in result.rejections])
+            .values([{"feed_id": feed_id, **r.__dict__} for r in result.rejections])
             .on_conflict_do_nothing(index_elements=["feed_id", "row_number"])
         )
     await session.commit()
     return result
 
 
-async def _supplier_id(session: AsyncSession, code: str) -> Any:
+async def ensure_supplier(session: AsyncSession, code: str) -> uuid.UUID:
+    """The supplier's ID, creating the supplier on first use."""
     await session.execute(insert(Supplier).values(code=code).on_conflict_do_nothing(index_elements=["code"]))
-    return await session.scalar(select(Supplier.id).where(Supplier.code == code))
+    found = await session.scalar(select(Supplier.id).where(Supplier.code == code))
+    assert found is not None  # inserted just above if it was missing
+    return found
 
 
 async def _upsert(session: AsyncSession, supplier_id: Any, batch: list[FeedRow], result: ImportResult) -> None:
@@ -213,6 +210,9 @@ async def _upsert(session: AsyncSession, supplier_id: Any, batch: list[FeedRow],
     result.inserted += sum(written)
     result.updated += len(written) - sum(written)
     result.unchanged += len(batch) - len(written)
+    result.product_ids += await session.scalars(
+        select(Product.id).where(Product.supplier_id == supplier_id, Product.supplier_sku.in_([r.sku for r in batch]))
+    )
 
 
 def _excerpt(values: list[str]) -> str:

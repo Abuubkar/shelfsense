@@ -21,7 +21,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await search.client().close()
 
 
-app = FastAPI(title="Shelfsense", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Shelfsense", version="0.3.0", lifespan=lifespan)
 app.include_router(graphql_router, prefix="/graphql")
 
 PROBLEM_JSON = "application/problem+json"
@@ -29,13 +29,14 @@ Session = Annotated[AsyncSession, Depends(get_session)]
 Limit = Annotated[int, Query(ge=1, le=100)]
 
 
-def problem_response(problem: Problem) -> JSONResponse:
-    return JSONResponse(problem.model_dump(mode="json"), status_code=problem.status, media_type=PROBLEM_JSON)
+def problem_response(problem: Problem, headers: dict[str, str] | None = None) -> JSONResponse:
+    return JSONResponse(problem.model_dump(mode="json"), status_code=problem.status, media_type=PROBLEM_JSON,
+                        headers=headers)
 
 
 @app.exception_handler(ApiProblem)
 async def api_problem_handler(_: Request, exc: ApiProblem) -> JSONResponse:
-    return problem_response(exc.problem)
+    return problem_response(exc.problem, exc.headers)
 
 
 @app.exception_handler(RequestValidationError)
@@ -51,12 +52,23 @@ async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSO
 
 
 def _problems(*statuses: int) -> dict[int | str, dict[str, Any]]:
-    return {status: {"model": Problem, "description": "An RFC 9457 problem."} for status in statuses}
+    responses: dict[int | str, dict[str, Any]] = {
+        status: {"model": Problem, "description": "An RFC 9457 problem."} for status in statuses
+    }
+    if 429 in responses:
+        responses[429]["headers"] = {"Retry-After": {"description": "Seconds to wait before retrying.",
+                                                     "schema": {"type": "integer"}}}
+    return responses
 
 
-@app.post("/v1/feeds:import-local", operation_id="importLocalFeed", responses=_problems(400, 404))
-async def import_local_feed(body: schemas.ImportLocalRequest, session: Session) -> schemas.ImportResult:
-    return await service.import_feed(session, body.path, body.supplier)
+@app.post("/v1/feeds", operation_id="createFeedUpload", status_code=201, responses=_problems(400, 503))
+async def create_feed_upload(body: schemas.FeedUploadRequest, session: Session) -> schemas.FeedUpload:
+    return await service.create_feed_upload(session, body.supplier, body.file_name)
+
+
+@app.post("/v1/feeds/{feed_id}:commit", operation_id="commitFeed", responses=_problems(404, 409, 429, 503))
+async def commit_feed(feed_id: uuid.UUID, session: Session) -> schemas.ImportResult:
+    return await service.commit_feed(session, feed_id)
 
 
 @app.get("/v1/feeds/{feed_id}/rejections", operation_id="listFeedRejections", responses=_problems(400, 404))
@@ -96,6 +108,12 @@ async def search_products(
 ) -> schemas.SearchResponse:
     filters = search.Filters(tuple(brand), tuple(color), tuple(category_id), price_min, price_max)
     return await service.search_products(session, search.client(), q, filters, page_size, cursor, debug)
+
+
+@app.post("/v1/admin/dlq/{queue}/redrive", operation_id="redriveDeadLetters", responses=_problems(400, 409, 503))
+async def redrive_dead_letters(queue: schemas.WorkQueue, body: schemas.RedriveRequest,
+                               session: Session) -> schemas.RedriveResult:
+    return await service.redrive(session, queue, body.dry_run)
 
 
 _default_openapi = app.openapi

@@ -3,6 +3,7 @@ and `make contract-check` fails if they drift in a way that would break a client
 
 import enum
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +16,10 @@ class ProblemCode(enum.StrEnum):
     MODEL_UNAVAILABLE = "model_unavailable"
     MODEL_TIMEOUT = "model_timeout"
     SEARCH_UNAVAILABLE = "search_unavailable"
+    FEED_NOT_UPLOADED = "feed_not_uploaded"
+    BACKLOG_FULL = "backlog_full"
+    REDRIVE_IN_PROGRESS = "redrive_in_progress"
+    QUEUE_UNAVAILABLE = "queue_unavailable"
 
 
 class Problem(BaseModel):
@@ -32,8 +37,10 @@ class Problem(BaseModel):
 class ApiProblem(Exception):
     """Raised anywhere in request handling (REST or GraphQL); REST renders it as application/problem+json."""
 
-    def __init__(self, status: int, code: ProblemCode, title: str, detail: str | None = None):
+    def __init__(self, status: int, code: ProblemCode, title: str, detail: str | None = None,
+                 headers: dict[str, str] | None = None):
         super().__init__(f"{status} {code}: {detail or title}")
+        self.headers = headers
         self.problem = Problem(type=f"https://github.com/Abuubkar/shelfsense/blob/main/docs/problems.md#{code}",
                                title=title, status=status, detail=detail, code=code)
 
@@ -43,9 +50,15 @@ class Money(BaseModel):
     currency: str = Field(pattern=r"^[A-Z]{3}$")
 
 
-class ImportLocalRequest(BaseModel):
-    path: str
+class FeedUploadRequest(BaseModel):
     supplier: str
+    file_name: str = Field(min_length=1, max_length=200)
+
+
+class FeedUpload(BaseModel):
+    feed_id: uuid.UUID
+    upload_url: str
+    expires_at: datetime
 
 
 class Rejection(BaseModel):
@@ -63,6 +76,7 @@ class ImportResult(BaseModel):
     updated: int
     unchanged: int
     rejected: int
+    enqueued: int
     rejections: list[Rejection]
 
 
@@ -156,3 +170,20 @@ class SearchResponse(BaseModel):
     facets: list[Facet]
     next_cursor: str | None
     debug: SearchDebug | None = None
+
+
+class WorkQueue(enum.StrEnum):
+    ENRICH = "enrich"
+    INDEX = "index"
+
+
+class RedriveRequest(BaseModel):
+    dry_run: bool = True
+
+
+class RedriveResult(BaseModel):
+    queue: WorkQueue
+    dry_run: bool
+    messages: int
+    reasons: dict[str, int]
+    task_handle: str | None

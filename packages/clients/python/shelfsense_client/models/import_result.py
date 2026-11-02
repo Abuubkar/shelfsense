@@ -25,6 +25,7 @@ class ImportResult:
         updated (int):
         unchanged (int):
         rejected (int):
+        enqueued (int): Products queued for enrichment (valid rows not yet enriched for their current content).
         rejections (list[Rejection]):
     """
 
@@ -35,6 +36,7 @@ class ImportResult:
     updated: int
     unchanged: int
     rejected: int
+    enqueued: int
     rejections: list[Rejection]
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -53,6 +55,8 @@ class ImportResult:
 
         rejected = self.rejected
 
+        enqueued = self.enqueued
+
         rejections = []
         for rejections_item_data in self.rejections:
             rejections_item = rejections_item_data.to_dict()
@@ -69,6 +73,7 @@ class ImportResult:
                 "updated": updated,
                 "unchanged": unchanged,
                 "rejected": rejected,
+                "enqueued": enqueued,
                 "rejections": rejections,
             }
         )
@@ -94,6 +99,8 @@ class ImportResult:
 
         rejected = d.pop("rejected")
 
+        enqueued = d.pop("enqueued")
+
         rejections = []
         _rejections = d.pop("rejections")
         for rejections_item_data in _rejections:
@@ -109,6 +116,7 @@ class ImportResult:
             updated=updated,
             unchanged=unchanged,
             rejected=rejected,
+            enqueued=enqueued,
             rejections=rejections,
         )
 

@@ -6,32 +6,32 @@ from typing import Any, TypeVar
 from attrs import define as _attrs_define
 from attrs import field as _attrs_field
 
-T = TypeVar("T", bound="ImportLocalRequest")
+T = TypeVar("T", bound="FeedUploadRequest")
 
 
 @_attrs_define
-class ImportLocalRequest:
+class FeedUploadRequest:
     """
     Attributes:
-        path (str): A CSV file under the API's feed directory (FEEDS_DIR).
         supplier (str): The supplier's code; created on first use.
+        file_name (str): The file's original name, kept for people; the feed is identified by its ID.
     """
 
-    path: str
     supplier: str
+    file_name: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        path = self.path
-
         supplier = self.supplier
+
+        file_name = self.file_name
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update(
             {
-                "path": path,
                 "supplier": supplier,
+                "file_name": file_name,
             }
         )
 
@@ -40,17 +40,17 @@ class ImportLocalRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        path = d.pop("path")
-
         supplier = d.pop("supplier")
 
-        import_local_request = cls(
-            path=path,
+        file_name = d.pop("file_name")
+
+        feed_upload_request = cls(
             supplier=supplier,
+            file_name=file_name,
         )
 
-        import_local_request.additional_properties = d
-        return import_local_request
+        feed_upload_request.additional_properties = d
+        return feed_upload_request
 
     @property
     def additional_keys(self) -> list[str]:

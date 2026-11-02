@@ -28,6 +28,7 @@ OASDIFF := docker run --rm -v $(CURDIR):/specs:ro tufin/oasdiff:v1.35.0
 # Regenerate everything derived from the contracts. Generated code is never edited by hand.
 codegen:
 	uv run python -c "from shelfsense_api.graphql import schema; print(schema.as_str())" > contracts/schema.graphql
+	uv run python scripts/write_message_schemas.py
 	uv run openapi-python-client generate --path contracts/openapi.yaml --output-path packages/clients/python \
 		--meta uv --overwrite --config contracts/client-config.yaml
 
