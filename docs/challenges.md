@@ -237,3 +237,44 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
   different result set.
 - **What we did.** Page 1's parse travels inside the cursor (`carry`), and the cursor is bound to what the client
   sent (q, explicit filters, `parse`). Later pages reuse the parse as is.
+
+## Slice 5b
+
+### The prototypes caught totals that didn't match the results
+
+- **Problem.** A filtered search said "4 results" and showed 7. The total, facet counts and the tail come from
+  the result-set query (`search.match_set`), which filtered *after* an approximate radial k-NN search over the
+  whole index; the head's hybrid query put the filter *inside* k-NN. The approximate search stops early, so the
+  post-filter lost three products whose exact cosine cleared the threshold.
+- **What we did.** The filter goes inside the k-NN clause of `match_set` too (OpenSearch's efficient filtering),
+  with a unit test. The same query's total went from 303 to 904: the old counts were missing products everywhere a
+  filter applied.
+
+### "under $100" became $100–$100
+
+- **Problem.** The 3B query model sometimes writes a one-sided price as a range with equal ends.
+- **What we did.** When both ends are equal, code keeps only the bound the query's own words ask for ("under",
+  "below", "up to" → maximum; "over", "above", "at least" → minimum).
+
+### `hidden` doesn't hide an element whose CSS sets `display`
+
+- **Problem.** Several prototype "Load more" buttons and a hidden results panel stayed visible: an author style
+  like `display:block` beats the `hidden` attribute.
+- **What we did.** In the prototypes, `[hidden]{display:none}` or explicit style toggles; in apps/web, elements are
+  rendered conditionally instead of hidden.
+
+### MSW 2 in Jest: ESM-only dependencies and a captured fetch
+
+- **Problem.** msw 2.15's dependencies include ES-module-only packages (`.mjs`, and `until-async` with
+  `"type": "module"`), which Jest's CommonJS runtime refuses. Then requests escaped MSW: openapi-fetch captured
+  `globalThis.fetch` at import, before MSW wrapped it.
+- **What we did.** `jest.config.ts` compiles `.mjs` files and the named ESM package; the API client looks fetch up
+  per call. (msw 3 is ESM-only throughout, the reason for staying on 2.x with Jest.)
+
+### Versions picked against the docs
+
+- **Problem.** The latest TypeScript (7.0, the Go-native compiler) no longer ships the JavaScript compiler API that
+  openapi-typescript and ts-node use (openapi-typescript declares `typescript ^5`); Next.js 16.4.4 was hours old.
+- **What we did.** TypeScript 5.9.3 and Next.js 16.4.3. The codegen client preset also needed
+  `@graphql-typed-document-node/core` as an explicit dev dependency (approved): its output imports it, and pnpm
+  doesn't expose transitive packages.

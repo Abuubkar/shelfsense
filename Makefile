@@ -1,6 +1,6 @@
 TAXONOMY_URL := https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt
 
-.PHONY: taxonomy test test-int codegen contract-check smoke chaos
+.PHONY: taxonomy test test-int codegen contract-check smoke chaos web web-test
 
 # Download the official Google Product Taxonomy (with IDs) as data/taxonomy/<version>.txt plus its checksum.
 # The version comes from the file's own header. Never fetched at runtime; scripts/load_taxonomy.py reads the file.
@@ -23,6 +23,13 @@ test-int:
 smoke:
 	uv run python scripts/smoke.py
 
+# The storefront (apps/web, Next.js) on :3020; the API must run on :8020.
+web:
+	cd apps/web && pnpm install && pnpm dev
+
+web-test:
+	cd apps/web && pnpm test && pnpm typecheck
+
 # Slice 3's Done-when: a 2,000-product feed through the queues with failing model, OpenSearch and a killed worker.
 # Starts its own API and workers on fresh queues; needs docker compose up and migrations, not Ollama.
 chaos:
@@ -35,6 +42,7 @@ codegen:
 	uv run python -c "from shelfsense_api.graphql import schema; print(schema.as_str())" > contracts/schema.graphql
 	uv run python scripts/write_message_schemas.py
 	uv run python scripts/write_money_fixtures.py
+	cd apps/web && pnpm codegen
 	uv run openapi-python-client generate --path contracts/openapi.yaml --output-path packages/clients/python \
 		--meta uv --overwrite --config contracts/client-config.yaml
 

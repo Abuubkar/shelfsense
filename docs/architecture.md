@@ -6,7 +6,7 @@ This is where the project ends up after slice 8. It is a destination, not a to-d
 > of 2.x (docs/adr/0004); Floci instead of LocalStack, which now needs an account token (docs/adr/0008); Redis
 > waits for its first use (slice 5's query cache). Shared code still lives in the apps/api package
 > (`shelfsense_api`: db, search, indexing, queue, messages, aws, normalize, supplier_import); the workers in apps/
-> import it, and apps/supplier_mock stands alone. It splits into packages/ when a piece needs to be installed
+> import it, apps/supplier_mock stands alone, and apps/web is the storefront (Next.js, ADR 0016). It splits into packages/ when a piece needs to be installed
 > without the API. The supplier import runs as a script (`scripts/import_supplier.py`), not yet an app.
 
 **Stack:** Python 3.12, uv workspaces, FastAPI, Pydantic v2, SQLAlchemy 2.0 async + asyncpg, Alembic, Strawberry GraphQL, Postgres 16 (source of truth), OpenSearch 2.x (search, with the k-NN plugin and search pipelines), AWS SQS + S3 via LocalStack (aioboto3 client), Redis 7, fastembed (bge-small-en-v1.5, bge-reranker-base), Next.js 15 + TypeScript storefront search UI, pnpm.

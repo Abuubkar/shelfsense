@@ -12,6 +12,7 @@ CASES = [(0, "USD"), (5, "USD"), (1999, "USD"), (123456, "USD"), (100000000, "US
 OUT = Path(__file__).resolve().parents[1] / "contracts" / "fixtures" / "money.json"
 
 if __name__ == "__main__":
-    OUT.write_text(json.dumps([{"amount_minor": a, "currency": c, "expected": format_money(a, c)} for a, c in CASES],
+    # Amounts as strings: a JSON number past 2^53 turns into a float in JavaScript before any test sees it.
+    OUT.write_text(json.dumps([{"amount_minor": str(a), "currency": c, "expected": format_money(a, c)} for a, c in CASES],
                               indent=2, ensure_ascii=False) + "\n")
     print(OUT)
