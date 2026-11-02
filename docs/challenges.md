@@ -155,3 +155,45 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 - **What it means beyond the script.** Every update is a delete plus an insert in Lucene, and the index worker
   re-indexes products (on redelivery, on every enrichment). The merge policy keeps deletes to a share of the
   index, but recall drops in the meantime. Parked in docs/backlog.md for the slice 6 eval.
+
+## Slice 4
+
+### Dedupe alone can't fix a drifting offset scan
+
+- **Problem.** The plan's first idea, dedupe by (sku, updated_at), removes the duplicates of a naive scan but not
+  its holes: a product updated mid-scan jumps to the front, behind the reader. Against the mock (5,104 products,
+  2 inserts and 3 updates per request) a naive scan read 185 twice and missed 185.
+- **What we did.** Overlapping pages with anchor SKUs keep unchanged products exact (they can only shift later),
+  and reconciliation re-reads from the top everything newer than the scan's first page, by the supplier's clock,
+  until one page holds all the changes (ADR 0011). 0 missing, 0 extra, 0 outdated.
+- **What made it work.** Taking the watermark from the supplier's own `updated_at`. A watermark from our clock
+  needs a skew margin, and with any margin longer than the import, every pass re-reads everything and the loop
+  never settles to one page.
+
+### `next_offset` isn't the number of products imported
+
+- **Problem.** The resume test first asserted products-before-failure == saved offset: 400 != 425. The offset
+  is a position in a list that grew by 25 at the front during the scan.
+- **What we did.** The test asserts saved pages × page size instead; the offset only says where to read next.
+
+### The first migration rehearsal cut over to a process that wasn't listening
+
+- **Problem.** The search loop was pointed at the freshly started old-code API before it accepted connections;
+  525 requests failed with `ConnectError` in 10 s, though the migration itself had caused none.
+- **What we did.** Discarded the run, added a gate (switch only after 3 × HTTP 200 in a row), and repeated the
+  whole rehearsal from the top with one loop: 1,296 requests, 0 errors. The aborted run's logs are kept in
+  `build/migration-demo/aborted/`.
+
+### Killing `uv run` doesn't kill the script
+
+- **Problem.** Interrupting the catch-up backfill with `pkill -INT -f "backfill_attributes.py"` hit the `uv`
+  wrapper; the Python child ran to the end.
+- **What we did.** Signal the interpreter itself (`pkill -f "python.*scripts/backfill_attributes.py"`). With
+  SIGKILL after 3 batches, `backfill_state` held 60,000 and the rerun resumed there.
+
+### Feed imports run at ~2,000 rows/s
+
+- **Problem.** Seeding 200k products through the feed import took 92 s; committing the 100k-row feed 67 s.
+  Profiling one 4,000-row file: most of the time is SQLAlchemy compiling and executing 500-row multi-VALUES
+  statements (products, then product_attributes).
+- **What we did.** Kept the one write path; parked COPY into a staging table in docs/backlog.md.

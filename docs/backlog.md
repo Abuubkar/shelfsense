@@ -38,3 +38,16 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   expunging deletes (docs/challenges.md). Options for slice 6, judged by recall against exact search on the golden
   queries: pass `method_parameters.ef_search` on the radial query, lower `index.merge.policy.deletes_pct_allowed`,
   or skip re-indexing products whose document didn't change.
+- **Feed import throughput ~2,000 rows/s** (slice 4). Multi-VALUES statement compilation dominates. COPY each batch
+  into a temporary staging table and `INSERT … SELECT … ON CONFLICT` from it; expect 10x. Keep `upsert_rows` as the
+  one write path.
+- **Supplier deletions aren't detected** (slice 4). A v1 or v2 listing only shows live products. Mark products not
+  seen in a complete v2 snapshot (or a full v1 scan) as withdrawn, after a grace period.
+- **Served taxonomy version per process** (slice 4). `TAXONOMY_VERSION` switches per process restart. When several
+  services read it, move it to a database row read with a short cache so one UPDATE switches everyone.
+- **Remapped categories keep old-release candidate IDs** (slice 4). `candidate_ids` copied by the taxonomy remap
+  name nodes of the previous release. Map them through `taxonomy_remaps` or mark them as such if they're used for
+  more than diagnostics.
+- **Seeds aren't enriched or indexed** (slice 4). 300k seed and bulk-feed products sit in Postgres only; search
+  covers the 45 enriched ones. Slice 6's eval enriches its golden subset; indexing all of them takes ~15 min of CPU
+  embedding (see "Embedding the query blocks a thread").
