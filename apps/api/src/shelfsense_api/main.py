@@ -1,116 +1,124 @@
 import uuid
-from pathlib import Path
-from typing import Annotated
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select
+from fastapi import Depends, FastAPI, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from shelfsense_api import feeds
-from shelfsense_api.classify import classify_product
-from shelfsense_api.db import Product, ProductCategory, TaxonomyNode, get_session
-from shelfsense_api.llm import ModelError
-from shelfsense_api.settings import settings
+from shelfsense_api import schemas, search, service
+from shelfsense_api.db import get_session
+from shelfsense_api.graphql import graphql_router
+from shelfsense_api.schemas import ApiProblem, Problem, ProblemCode
 
-app = FastAPI(title="Shelfsense", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await search.client().close()
+
+
+app = FastAPI(title="Shelfsense", version="0.2.0", lifespan=lifespan)
+app.include_router(graphql_router, prefix="/graphql")
+
+PROBLEM_JSON = "application/problem+json"
 Session = Annotated[AsyncSession, Depends(get_session)]
+Limit = Annotated[int, Query(ge=1, le=100)]
 
 
-class ImportLocalRequest(BaseModel):
-    # A file under FEEDS_DIR on the API's machine. Uploads to S3 replace this in slice 3.
-    path: str
-    supplier: str
+def problem_response(problem: Problem) -> JSONResponse:
+    return JSONResponse(problem.model_dump(mode="json"), status_code=problem.status, media_type=PROBLEM_JSON)
 
 
-class RejectionOut(BaseModel):
-    row_number: int
-    reason_code: str
-    detail: str
-    excerpt: str
+@app.exception_handler(ApiProblem)
+async def api_problem_handler(_: Request, exc: ApiProblem) -> JSONResponse:
+    return problem_response(exc.problem)
 
 
-class ImportResultOut(BaseModel):
-    file_sha256: str
-    rows: int
-    inserted: int
-    updated: int
-    unchanged: int
-    rejected: int
-    rejections: list[RejectionOut]
+@app.exception_handler(RequestValidationError)
+async def validation_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    details = "; ".join(f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors())
+    return problem_response(ApiProblem(400, ProblemCode.INVALID_REQUEST, "Invalid request", details).problem)
 
 
-class CategoryOut(BaseModel):
-    taxonomy_version: str
-    node_id: int | None
-    full_path: str | None
-    confidence: float
-    candidate_ids: list[int]
-    model: str
-    prompt_version: str
-    prompt_tokens: int
-    output_tokens: int
-    total_ms: int
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    code = ProblemCode.NOT_FOUND if exc.status_code == 404 else ProblemCode.INVALID_REQUEST
+    return problem_response(ApiProblem(exc.status_code, code, str(exc.detail)).problem)
 
 
-class ProductOut(BaseModel):
-    id: uuid.UUID
-    supplier_sku: str
-    title: str
-    description: str | None
-    brand: str | None
-    gtin: str | None
-    price_minor: int
-    currency: str
-    attributes: dict[str, str]
-    category: CategoryOut | None
+def _problems(*statuses: int) -> dict[int | str, dict[str, Any]]:
+    return {status: {"model": Problem, "description": "An RFC 9457 problem."} for status in statuses}
 
 
-@app.post("/v1/feeds:import-local")
-async def import_local_feed(body: ImportLocalRequest, session: Session) -> ImportResultOut:
-    feeds_dir = Path(settings.feeds_dir).resolve()
-    path = (feeds_dir / body.path).resolve()
-    if not path.is_relative_to(feeds_dir) or not path.is_file():
-        raise HTTPException(404, f"no feed file {body.path!r} under {settings.feeds_dir}")
-    result = await feeds.import_file(session, path, body.supplier)
-    return ImportResultOut(
-        **{k: v for k, v in result.__dict__.items() if k != "rejections"},
-        rejected=len(result.rejections),
-        rejections=[RejectionOut(**r.__dict__) for r in result.rejections],
-    )
+@app.post("/v1/feeds:import-local", operation_id="importLocalFeed", responses=_problems(400, 404))
+async def import_local_feed(body: schemas.ImportLocalRequest, session: Session) -> schemas.ImportResult:
+    return await service.import_feed(session, body.path, body.supplier)
 
 
-@app.post("/v1/products/{product_id:uuid}:enrich")
-async def enrich_product(product_id: uuid.UUID, session: Session) -> ProductOut:
-    product = await session.get(Product, product_id)
-    if product is None:
-        raise HTTPException(404, "product not found")
-    try:
-        await classify_product(session, product)
-    except ModelError as exc:
-        raise HTTPException(504 if exc.code == "model_timeout" else 502, f"{exc.code}: {exc}") from exc
-    return await get_product(product_id, session)
+@app.get("/v1/feeds/{feed_id}/rejections", operation_id="listFeedRejections", responses=_problems(400, 404))
+async def list_feed_rejections(feed_id: uuid.UUID, session: Session, limit: Limit = 25,
+                               cursor: str | None = None) -> schemas.RejectionPage:
+    return await service.list_rejections(session, feed_id, limit, cursor)
 
 
-@app.get("/v1/products/{product_id:uuid}")
-async def get_product(product_id: uuid.UUID, session: Session) -> ProductOut:
-    product = await session.get(Product, product_id)
-    if product is None:
-        raise HTTPException(404, "product not found")
-    row = (await session.execute(
-        select(ProductCategory, TaxonomyNode.full_path)
-        .outerjoin(TaxonomyNode, (TaxonomyNode.version == ProductCategory.taxonomy_version)
-                   & (TaxonomyNode.node_id == ProductCategory.node_id))
-        .where(ProductCategory.product_id == product_id,
-               ProductCategory.taxonomy_version == settings.taxonomy_version)
-    )).one_or_none()
-    category = None
-    if row is not None:
-        pc, full_path = row
-        category = CategoryOut(full_path=full_path, **{f: getattr(pc, f) for f in CategoryOut.model_fields
-                                                       if f != "full_path"})
-    return ProductOut(
-        id=product.id, supplier_sku=product.supplier_sku, title=product.title, description=product.description,
-        brand=product.brand, gtin=product.gtin, price_minor=product.price_minor, currency=product.currency,
-        attributes=product.attributes_json, category=category,
-    )
+@app.get("/v1/products", operation_id="listProducts", responses=_problems(400))
+async def list_products(session: Session, supplier: str | None = None, category_id: int | None = None,
+                        limit: Limit = 25, cursor: str | None = None) -> schemas.ProductPage:
+    return await service.list_products(session, limit, cursor, supplier, category_id)
+
+
+@app.get("/v1/products/{product_id}", operation_id="getProduct", responses=_problems(404))
+async def get_product(product_id: uuid.UUID, session: Session) -> schemas.Product:
+    return await service.get_product(session, product_id)
+
+
+@app.post("/v1/products/{product_id}:enrich", operation_id="enrichProduct", responses=_problems(404, 502, 504))
+async def enrich_product(product_id: uuid.UUID, session: Session) -> schemas.Product:
+    return await service.enrich_product(session, product_id)
+
+
+@app.get("/v1/search", operation_id="searchProducts", responses=_problems(400, 503))
+async def search_products(
+    session: Session,
+    q: Annotated[str, Query(max_length=200)] = "",
+    brand: Annotated[list[str], Query()] = [],  # noqa: B006  # FastAPI copies query defaults per request
+    color: Annotated[list[str], Query()] = [],  # noqa: B006
+    category_id: Annotated[list[int], Query()] = [],  # noqa: B006
+    price_min: Annotated[int | None, Query(ge=0)] = None,
+    price_max: Annotated[int | None, Query(ge=0)] = None,
+    page_size: Annotated[int, Query(ge=1, le=48)] = 24,
+    cursor: str | None = None,
+    debug: bool = False,
+) -> schemas.SearchResponse:
+    filters = search.Filters(tuple(brand), tuple(color), tuple(category_id), price_min, price_max)
+    return await service.search_products(session, search.client(), q, filters, page_size, cursor, debug)
+
+
+_default_openapi = app.openapi
+
+
+def openapi_with_problem_json() -> dict[str, Any]:
+    """FastAPI documents every response model as application/json and adds a 422 validation response to each
+    route. Ours differ: errors are application/problem+json, and validation failures are 400 problems."""
+    if app.openapi_schema is None:
+        schema = _default_openapi()
+        for operations in schema["paths"].values():
+            for operation in operations.values():
+                responses = operation.get("responses", {})
+                if "HTTPValidationError" in str(responses.get("422", "")):
+                    del responses["422"]
+                for status, response in responses.items():
+                    content = response.get("content", {})
+                    if int(status) >= 400 and "application/json" in content:
+                        response["content"] = {PROBLEM_JSON: content["application/json"]}
+        for unused in ("HTTPValidationError", "ValidationError"):
+            schema["components"]["schemas"].pop(unused, None)
+    assert app.openapi_schema is not None  # FastAPI's openapi() stores the schema it builds
+    return app.openapi_schema
+
+
+app.openapi = openapi_with_problem_json  # type: ignore[method-assign]  # FastAPI's documented way to customize the schema
