@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type SearchItem, type SearchResponse } from "@/lib/api";
 import { apiFilters, fromParams, toggle, toParams, type SearchState } from "@/lib/search-state";
+import { understood } from "@/lib/understood";
 import { FacetSidebar } from "./FacetSidebar";
 import { ProductCard } from "./ProductCard";
 import { SearchBox } from "./SearchBox";
@@ -59,6 +60,7 @@ export function SearchPage() {
   };
 
   const parse = first?.query_parse;
+  const chips = understood(parse);
   return (
     <>
       <header className="top">
@@ -66,7 +68,7 @@ export function SearchPage() {
         <SearchBox value={state.q} onSearch={(q) => go({ q, brand: [], color: [], category_id: [], price: null })} />
       </header>
       <div className="layout">
-        <FacetSidebar facets={first?.facets ?? []} state={state} parse={parse}
+        <FacetSidebar facets={first?.facets ?? []} state={state}
                       onToggle={(facet, value) => go(toggle(state, facet, value))} />
         <main aria-busy={loading}>
           {error && <p role="alert" className="notice">Search failed: {error}</p>}
@@ -76,13 +78,19 @@ export function SearchPage() {
               {state.q && <span className="muted">for “{parse?.keywords ?? state.q}”</span>}
             </div>
           )}
+          {chips.length > 0 && (
+            <p className="understood" aria-label="Filters read from your search">
+              <span className="label">Read from your search</span>
+              {chips.map((c) => <span key={c.label} className={`chip${c.relaxed ? " relaxed" : ""}`}>{c.label}</span>)}
+            </p>
+          )}
           {parse?.source === "degraded" && (
             <p className="notice" role="status">Showing broader results: we couldn’t read filters from your search in time.</p>
           )}
           {parse?.price_relaxed && <p className="notice" role="status">Nothing matched your price, so all prices are shown.</p>}
           {first && !first.total && <p className="empty">No products match. Try fewer words or remove a filter.</p>}
           <ul className="grid">
-            {items.map((item) => <li key={item.id}><ProductCard item={item} search={key} /></li>)}
+            {items.map((item) => <li key={item.id}><ProductCard item={item} search={key} terms={parse?.keywords ?? state.q} /></li>)}
           </ul>
           {cursor && <button className="more" onClick={loadMore} disabled={loading}>{loading ? "Loading…" : "Load more"}</button>}
         </main>
