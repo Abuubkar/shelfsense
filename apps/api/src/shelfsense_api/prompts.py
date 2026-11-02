@@ -2,6 +2,8 @@
 traced to the exact prompt that produced them."""
 
 CLASSIFY_VERSION = "classify/1"
+# Sent after a reply that failed validation, with the reason; that call is recorded as both versions.
+CLASSIFY_RETRY_VERSION = "classify-retry/1"
 
 # The reply shape is spelled out even though Ollama's `format` enforces it: without it qwen2.5 tried to write the
 # ID as a bare number, the grammar refused, and it was forced into "NONE" (docs/challenges.md).
@@ -29,3 +31,9 @@ def classify_user(title: str, brand: str | None, description: str | None, candid
     lines.append("Candidates:")
     lines.extend(f"{node_id} = {path}" for node_id, path in candidates)
     return "\n".join(lines)
+
+
+def classify_retry(error: str) -> str:
+    return (f"That reply was rejected: {error}\n"
+            'Reply again with JSON only, in exactly this shape: {"category_id": "<id>"}, '
+            "with an id copied from the candidate list, or NONE.")
