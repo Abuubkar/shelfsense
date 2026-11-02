@@ -87,7 +87,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
         <h2 id="similar">Similar products</h2>
         {alike.length ? (
           <ul className="similar">{alike.map((i) => (
-            <li key={i.id}><Link href={`/products/${i.id}`}><span>{i.title}</span><span className="price">{formatMoney(i.price)}</span></Link></li>
+            <li key={i.id}><Link href={`/products/${i.id}${search.q ? `?${toParams(search)}` : ""}`}><span>{i.title}</span><span className="price">{formatMoney(i.price)}</span></Link></li>
           ))}</ul>
         ) : <p className="muted">Nothing similar yet.</p>}
       </section>
