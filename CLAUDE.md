@@ -12,21 +12,25 @@ Marketplace catalog enrichment and search: messy supplier feeds in, classified p
 ## Run it
 
 ```bash
-docker compose up -d --wait                  # Postgres 18 + pgvector on :5436, OpenSearch 3.9 on :9201
+docker compose up -d --wait                  # Postgres 18 + pgvector :5436, OpenSearch 3.9 :9201, Floci (SQS, S3) :4566
 uv run alembic upgrade head
+uv run python scripts/init_aws.py            # feeds bucket, enrich and index queues with DLQs; a rerun is a no-op
 make taxonomy                                # only to fetch a new release; 2021-09-21 is committed
 uv run python scripts/load_taxonomy.py       # embeds 5,595 taxonomy paths (~1 min on CPU); a rerun is a no-op
 ollama pull qwen2.5:7b-instruct              # once; Ollama runs natively on the Mac, not in Docker
 uv run uvicorn shelfsense_api.main:app --port 8020
-curl -X POST localhost:8020/v1/feeds:import-local -H 'content-type: application/json' \
-  -d '{"path": "sample.csv", "supplier": "acme-outdoor"}'
-curl -X POST "localhost:8020/v1/products/${id}:enrich"   # braces: in zsh, $id:e is a filename modifier
-uv run python scripts/sync_index.py          # Postgres -> OpenSearch (alias `products`); rerun after imports/enrichment
+uv run python -m shelfsense_worker_enrich    # one per Ollama; LLM_MAX_CONCURRENCY = OLLAMA_NUM_PARALLEL
+uv run python -m shelfsense_worker_index
+uv run python scripts/upload_feed.py data/feeds/sample.csv acme-outdoor   # presign, PUT, commit -> queues
+curl -X POST "localhost:8020/v1/products/${id}:enrich"   # one product now; braces: in zsh, $id:e is a filename modifier
+uv run python scripts/sync_index.py          # full rebuild of the index from Postgres (fresh setup or repair)
 curl "localhost:8020/v1/search?q=hiking%20boots&debug=true"
+curl -X POST localhost:8020/v1/admin/dlq/enrich/redrive -H 'content-type: application/json' -d '{}'  # dry run
 make smoke                                   # 5 searches + deep paging + GraphQL, via the generated client
 make test                                    # unit tests, offline
-make test-int                                # service tests on Postgres and OpenSearch containers (~2.5 min)
-make codegen                                 # after changing contracts/openapi.yaml or GraphQL types
+make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)
+make test-int                                # service tests on Postgres, OpenSearch and Floci containers (~3 min)
+make codegen                                 # after changing contracts/openapi.yaml, GraphQL types or messages.py
 make contract-check                          # oasdiff: the code's spec vs contracts/openapi.yaml
 ```
 
@@ -57,7 +61,21 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - Embedding and reranking go through `embeddings.py` (bge-small, bge-reranker-base); never load a fastembed model
   elsewhere.
 - Feed rejections use spreadsheet row numbers (header = row 1), counted per CSV record, not per line.
-- A re-import of the same file must change nothing: products upsert only on a changed content hash, and
-  rejections are unique on (file hash, row number).
+- Committing a feed again must change nothing: products upsert only on a changed content hash, rejections are
+  unique on (feed, row number), and only products not enriched for their current content are queued. A feed is
+  one upload (ADR 0010); the same bytes uploaded twice are two feeds.
+- Queue work goes through `queue.consume` (ADR 0009). Handlers decide per product with `plan_followups`: done
+  moves on, transient is resubmitted with attempt + 1 (max `MAX_ATTEMPTS`), permanent is dead-lettered one product
+  per message through `queue.dead_letter`, which records the reason before sending. Never let one product's
+  failure fail its message.
+- Workers must be idempotent: enrichment is skipped when the product already has a category for its current
+  content hash, taxonomy version and prompt version (`classify.needs_enrichment`), and a category is written in
+  the same transaction as its `enrichment_runs` row.
+- Queue message bodies are `messages.py` models: consumers ignore unknown fields; a change an old consumer would
+  misread bumps `schema_version`. `contracts/messages/` is generated from them.
+- SQS and S3 go through `aws.py` (one client setup, endpoint from settings). Queue names can't contain dots;
+  DLQs are `<queue>-dlq`.
+- Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
+  `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;
   the loader refuses a file whose checksum doesn't match.
