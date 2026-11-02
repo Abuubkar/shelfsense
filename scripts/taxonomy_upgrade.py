@@ -9,8 +9,8 @@
 4. Products in split or deleted categories are stale: they're queued for classification into the new release.
 5. --status: how many products still lack a category in the new release. At 0, switch TAXONOMY_VERSION (restart
    the API and workers).
-6. --reindex, after the switch: queue index requests for the products whose category changed (anything but
-   "same"), so search shows the new paths. Products in unchanged categories keep their documents.
+6. --reindex, after the switch (or a switch back): queue index requests for the products whose category changed
+   (anything but "same"), so search shows the served release's paths. Other products keep their documents.
 """
 
 import asyncio
@@ -58,7 +58,7 @@ STALE_SQL = text("""
     WHERE pc.taxonomy_version = :old AND r.kind IN ('split', 'deleted')
 """)
 CHANGED_SQL = text("""
-    SELECT pc.product_id FROM product_categories pc
+    SELECT DISTINCT pc.product_id FROM product_categories pc
     JOIN taxonomy_remaps r ON r.old_version = pc.taxonomy_version AND r.old_node_id = pc.node_id
                           AND r.new_version = :new
     WHERE r.kind <> 'same'
@@ -77,14 +77,19 @@ async def main() -> None:
     params = {"old": old, "new": new}
     async with SessionLocal() as session:
         if "--reindex" in sys.argv:
-            if settings.taxonomy_version != new:
-                raise SystemExit(f"switch TAXONOMY_VERSION to {new} first (it's {settings.taxonomy_version})")
-            changed = list(await session.scalars(CHANGED_SQL, params))
+            # After the switch the served version is `new`, so the old one comes from the remaps. Works the same
+            # after switching back (a rollback): the index follows whichever release is served.
+            before = await session.scalar(select(TaxonomyRemap.old_version).where(TaxonomyRemap.new_version == new)
+                                          .limit(1))
+            if settings.taxonomy_version not in (before, new):
+                raise SystemExit(f"serving {settings.taxonomy_version}, neither {before} nor {new}")
+            changed = list(await session.scalars(CHANGED_SQL, {"old": before, "new": new}))
             async with aws.sqs() as sqs:
                 await aws.send(sqs, settings.index_queue, [
                     IndexRequest(product_ids=changed[i:i + MAX_INDEX_IDS]).model_dump_json()
                     for i in range(0, len(changed), MAX_INDEX_IDS)])
-            print(f"queued {len(changed)} products whose category changed for reindexing under {new}")
+            print(f"queued {len(changed)} products whose category changed, to reindex under "
+                  f"{settings.taxonomy_version}")
             return
         if "--status" in sys.argv:
             missing = await session.scalar(MISSING_SQL, params)
