@@ -104,6 +104,9 @@ make contract-check                          # oasdiff: the code's spec vs contr
   generated: `make codegen`, never edit `src/lib/api-types.ts` or `src/gql/`. Money is shown with `formatMoney`
   (BigInt, mirrors `money.py`, fixtures in `contracts/fixtures/money.json`); evidence offsets are code points
   (`src/lib/evidence.ts`). The browser calls `/api/*` on its own origin; Next forwards it to the API.
+- apps/web look (ADR 0017): colours only as the tokens on `:root` (light and dark); no hue in the chrome, so the
+  products' own colours are the only colour on screen. Product pictures go through `ProductArt` (drawn, never a fake
+  photo). One typeface, Geist, via `next/font`.
 - Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;

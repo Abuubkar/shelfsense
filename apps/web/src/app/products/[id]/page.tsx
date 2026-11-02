@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Evidence } from "@/components/Evidence";
+import { ProductArt } from "@/components/ProductArt";
 import { ProductTabs } from "@/components/ProductTabs";
 import { RankingInfo } from "@/components/RankingInfo";
 import { formatMoney } from "@/lib/money";
 import { loadProduct, rankingFor, rawAttributesText, similar, spansFor, specs, type Spec } from "@/lib/product";
 import { fromParams, toParams } from "@/lib/search-state";
-import { swatch } from "@/lib/swatch";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -54,10 +54,10 @@ export default async function ProductPage({ params, searchParams }: Props) {
         {product.category && <span title="How sure the model was"> ({Math.round(product.category.confidence * 100)}%)</span>}
       </nav>
       <div className="hero">
-        <div className="gallery" aria-hidden="true">
-          <div className="main" style={{ background: swatch(color) }} />
-          <div className="thumbs"><div /><div /><div /><div /></div>
-        </div>
+        <figure className="gallery">
+          <div className="art-tile"><ProductArt id={product.id} title={product.title} color={color} categoryPath={product.category?.fullPath} className="art" /></div>
+          <figcaption>Drawn from the listing; no photo yet.</figcaption>
+        </figure>
         <div className="buy">
           <div className="muted">{product.brand}</div>
           <h1><Evidence text={product.title} spans={spansFor(product, "title")} /></h1>
@@ -87,7 +87,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
         <h2 id="similar">Similar products</h2>
         {alike.length ? (
           <ul className="similar">{alike.map((i) => (
-            <li key={i.id}><Link href={`/products/${i.id}${search.q ? `?${toParams(search)}` : ""}`}><span>{i.title}</span><span className="price">{formatMoney(i.price)}</span></Link></li>
+            <li key={i.id}><Link href={`/products/${i.id}${search.q ? `?${toParams(search)}` : ""}`}><span className="art-tile"><ProductArt id={`s-${i.id}`} title={i.title} color={i.color} categoryPath={i.category_path} className="art" /></span><span>{i.title}</span><span className="price">{formatMoney(i.price)}</span></Link></li>
           ))}</ul>
         ) : <p className="muted">Nothing similar yet.</p>}
       </section>

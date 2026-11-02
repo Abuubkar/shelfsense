@@ -38,6 +38,6 @@ autocomplete), NN/g (mobile filter trays) and the AI shopping modes (summary and
 
 ## Assumptions
 
-- Product images will replace the colour swatches; the layout reserves the space.
+- Product images will replace the colour swatches; the layout reserves the space. (Superseded: products are drawn until photos exist, ADR 0017.)
 - The ranking explanation re-runs the search (48 results) when a product is opened from it; fine at this scale,
   and the page still renders without it.
