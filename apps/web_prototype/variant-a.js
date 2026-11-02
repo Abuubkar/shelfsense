@@ -49,7 +49,8 @@ export function mount(root) {
     return f;
   }
   async function run(more = false) {
-    const body = await search({ q: state.q, filters: filters(), cursor: more ? state.cursor : null });
+    // debug: per-stage scores, for the ranking-model comparison in the detail drawer
+    const body = await search({ q: state.q, filters: filters(), cursor: more ? state.cursor : null, debug: true });
     state.items = more ? state.items.concat(body.items) : body.items;
     state.cursor = body.next_cursor;
     state.last = body;
@@ -79,7 +80,7 @@ export function mount(root) {
       <div class="m">${esc((i.category_path ?? "").split(" > ").slice(-1)[0])}</div><div class="price">${money(i.price)}</div></div></article>`).join("");
     $(".a-more").hidden = !state.cursor;
     root.querySelectorAll(".a-card").forEach((card) => {
-      const open = () => DETAILS[currentDetail()].open({ item: state.items[Number(card.dataset.n)], card, root });
+      const open = () => DETAILS[currentDetail()].open({ item: state.items[Number(card.dataset.n)], card, root, items: state.items });
       card.onclick = open;
       card.onkeydown = (e) => { if (e.key === "Enter") open(); };
     });

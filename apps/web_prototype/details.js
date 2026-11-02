@@ -81,10 +81,48 @@ const page = {
   },
 };
 
-// 3. Specs-first drawer: what is known about the product, and where each fact came from, before the prose.
+// How each ranking model scored the product, each on its own scale, and where it would have ranked by that model
+// alone among the loaded results (from prototype C's "why it ranked", which the user wanted kept).
+const MODELS = [
+  ["bm25", "bm25_normalized", "Keyword match", "BM25 on title, brand, category, description"],
+  ["knn", "knn_normalized", "Meaning match", "bge-small embeddings, k-NN"],
+  ["hybrid", "hybrid", "Hybrid", "the two above, min-max normalized, 50/50"],
+  ["rerank", null, "Reranker", "bge-reranker-base reads query and product together"],
+  ["tail", null, "Combined score", "BM25 + k-NN, used below the top 50"],
+];
+function modelsHtml(item, items) {
+  const s = item.debug?.scores ?? {};
+  const rows = MODELS.filter(([key]) => s[key] != null);
+  if (!rows.length) return `<p class="muted" style="font-size:13px">No scores for this result (they come with the search's debug view).</p>`;
+  const rankBy = (key) => {
+    const scored = items.filter((i) => i.debug?.scores?.[key] != null).sort((a, b) => b.debug.scores[key] - a.debug.scores[key]);
+    return [scored.findIndex((i) => i.id === item.id) + 1, scored.length];
+  };
+  const bar = (key, normKey) => {
+    const v = normKey ? s[normKey] : key === "rerank" ? 1 / (1 + Math.exp(-s.rerank)) : null;
+    if (v == null) { const [r, n] = rankBy(key); return n ? 1 - (r - 1) / n : 0; }
+    return Math.max(0, Math.min(1, v));
+  };
+  const stage = item.debug.stage === "head"
+    ? `Shown at #${item.rank}: one of the top 50 by the hybrid score, then put in order by the reranker.`
+    : `Shown at #${item.rank}: below the top 50, ordered by the combined score (not reranked).`;
+  return `<p style="font-size:13px;margin:0 0 8px">${stage}</p><table class="dt-models">${rows.map(([key, normKey, label, how]) => {
+    const [r, n] = rankBy(key);
+    const final = (key === "rerank" && item.debug.stage === "head") || (key === "tail" && item.debug.stage === "tail");
+    return `<tr class="${final ? "final" : ""}"><td><b>${label}</b><div>${how}</div></td><td class="num">${s[key].toFixed(3)}</td>
+      <td class="bar"><i style="width:${Math.round(bar(key, normKey) * 100)}%"></i></td><td class="num">#${r}<div>of ${n}</div></td></tr>`;
+  }).join("")}</table><p class="muted" style="font-size:11px;margin-top:6px">Bars use each model's own scale (BM25 and k-NN after normalization, the reranker through a sigmoid). Ranks are among the ${items.length} results loaded so far; the highlighted row decided the order.</p>`;
+}
+const MODELS_STYLE = `<style>.dt-models{width:100%;border-collapse:collapse;font-size:13px}.dt-models td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+  .dt-models td div{font-size:11px;color:var(--muted)}.dt-models .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .dt-models .bar{width:90px}.dt-models .bar i{display:block;height:8px;margin-top:5px;border-radius:4px;background:var(--accent)}
+  .dt-models tr.final{background:var(--accent-bg)}</style>`;
+
+// 3. Specs-first drawer: what is known about the product, and where each fact came from, before the prose; then how
+// each ranking model saw it.
 const drawer = {
-  NAME: "Specs-first drawer",
-  async open({ item }) {
+  NAME: "Specs-first drawer + ranking models",
+  async open({ item, items = [item] }) {
     close(".dt-layer");
     const p = await product(item.id);
     const el = document.createElement("aside");
@@ -95,6 +133,7 @@ const drawer = {
       <h4 style="margin:0 0 4px;font-size:12px;color:var(--muted);text-transform:uppercase">Specifications</h4>
       <table class="dt-specs">${specs(p).map((s) => `<tr><th>${esc(s.label)}</th><td>${esc(s.value)}<div style="font-size:11px;color:var(--muted)">${s.source === "supplier" ? "from the seller's data" : `read from the ${s.field?.replace("_", " ")}: “${esc(s.quote)}”`}</div></td></tr>`).join("")}</table>
       <h4 style="margin:20px 0 4px;font-size:12px;color:var(--muted);text-transform:uppercase">Description</h4><p style="font-size:14px;line-height:1.65">${descriptionHtml(p)}</p>
+      <h4 style="margin:20px 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase">How the ranking models saw it</h4>${MODELS_STYLE}${modelsHtml(item, items)}
       <h4 style="margin:20px 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase">Similar</h4><div class="sim">Loading…</div></div>`;
     el.querySelector(".dt-x").onclick = () => el.remove();
     document.body.append(el);
