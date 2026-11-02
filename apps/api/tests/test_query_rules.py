@@ -52,3 +52,13 @@ def test_a_parsed_price_is_relaxable_only_when_it_was_applied() -> None:
     assert not _parsed_price_applied(parsed(colors=["red"]), search.Filters())
     _, relaxed = apply_parse(priced.model_copy(update={"price_relaxed": True}), "q", search.Filters())
     assert (relaxed.price_min, relaxed.price_max) == (None, None)
+
+
+def test_a_one_sided_price_written_as_a_range_keeps_only_the_bound_the_query_asked_for() -> None:
+    reply = {"keywords": "boots", "category_hint": None, "filters": {
+        "price_min": 100, "price_max": 100, "colors": [], "exclude_colors": [], "materials": [],
+        "exclude_materials": [], "gender": None, "size": None}}
+    under = _from_reply(reply, "boots under $100").filters
+    over = _from_reply(reply, "boots over $100").filters
+    assert (under.price_min, under.price_max) == (None, 10000)
+    assert (over.price_min, over.price_max) == (10000, None)

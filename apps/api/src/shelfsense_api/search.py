@@ -154,17 +154,21 @@ def _lexical(q: str) -> dict[str, Any]:
                             "_name": "lexical"}}
 
 
-def _semantic(vector: list[float]) -> dict[str, Any]:
+def _semantic(vector: list[float], filters: Filters | None = None) -> dict[str, Any]:
     # Radial search (min_score instead of k): every product above the threshold, so it defines a set to page
-    # through instead of a fixed top-k.
-    return {"knn": {"embedding": {"vector": vector, "min_score": settings.knn_min_score, "_name": "semantic"}}}
+    # through instead of a fixed top-k. Filters go inside the k-NN query: filtering only afterwards loses products,
+    # because the approximate search over the whole index stops early (docs/challenges.md, slice 5b).
+    knn: dict[str, Any] = {"vector": vector, "min_score": settings.knn_min_score, "_name": "semantic"}
+    if filters is not None and (clauses := filter_clauses(filters)):
+        knn["filter"] = {"bool": {"filter": clauses}}
+    return {"knn": {"embedding": knn}}
 
 
 def match_set(q: str, vector: list[float] | None, filters: Filters, exclude: list[str] | None = None) -> dict[str, Any]:
     """The query's whole result set as one bool query (no ranking subtleties: used for facets and the tail)."""
     bool_query: dict[str, Any] = {"filter": filter_clauses(filters)}
     if q and vector is not None:
-        bool_query |= {"should": [_lexical(q), _semantic(vector)], "minimum_should_match": 1}
+        bool_query |= {"should": [_lexical(q), _semantic(vector, filters)], "minimum_should_match": 1}
     if exclude:
         bool_query["must_not"] = [{"ids": {"values": list(exclude)}}]
     return {"bool": bool_query}

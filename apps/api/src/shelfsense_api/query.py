@@ -182,10 +182,16 @@ def _from_reply(answer: dict[str, Any], text: str) -> QueryParse:
     # The small model writes "size 8" as a letter size; a number without a system is a US size (the prompt's rule).
     if size and size.get("system") == "alpha" and re.fullmatch(r"\d{1,2}(\.5)?", str(size.get("value", ""))):
         size = {**size, "system": "US"}
-    price_min = _minor(raw.get("price_min"))
+    price_min, price_max = _minor(raw.get("price_min")) or None, _minor(raw.get("price_max"))
+    # The small model sometimes turns "under $100" into 100-100: one bound, by the query's own words.
+    if price_min is not None and price_min == price_max:
+        if re.search(r"\b(under|below|less than|cheaper than|up to|max)\b", text, re.IGNORECASE):
+            price_min = None
+        elif re.search(r"\b(over|above|more than|at least|from)\b", text, re.IGNORECASE):
+            price_max = None
     filters = ParsedFilters(
         # A minimum of 0 is no minimum: the model fills it in for "under $X".
-        price_min=price_min or None, price_max=_minor(raw.get("price_max")),
+        price_min=price_min, price_max=price_max,
         colors=_unique(normalize_color(c) for c in raw.get("colors") or []),
         exclude_colors=_unique(normalize_color(c) for c in raw.get("exclude_colors") or []),
         materials=_unique(normalize_material(m) for m in raw.get("materials") or []),

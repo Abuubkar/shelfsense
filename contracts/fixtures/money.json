@@ -1,0 +1,57 @@
+[
+  {
+    "amount_minor": 0,
+    "currency": "USD",
+    "expected": "$0.00"
+  },
+  {
+    "amount_minor": 5,
+    "currency": "USD",
+    "expected": "$0.05"
+  },
+  {
+    "amount_minor": 1999,
+    "currency": "USD",
+    "expected": "$19.99"
+  },
+  {
+    "amount_minor": 123456,
+    "currency": "USD",
+    "expected": "$1,234.56"
+  },
+  {
+    "amount_minor": 100000000,
+    "currency": "USD",
+    "expected": "$1,000,000.00"
+  },
+  {
+    "amount_minor": -1250,
+    "currency": "EUR",
+    "expected": "-€12.50"
+  },
+  {
+    "amount_minor": 1235,
+    "currency": "JPY",
+    "expected": "¥1,235"
+  },
+  {
+    "amount_minor": 999,
+    "currency": "GBP",
+    "expected": "£9.99"
+  },
+  {
+    "amount_minor": 1234567,
+    "currency": "KWD",
+    "expected": "KWD 1,234.567"
+  },
+  {
+    "amount_minor": 4200,
+    "currency": "CHF",
+    "expected": "CHF 42.00"
+  },
+  {
+    "amount_minor": 900719925474099312,
+    "currency": "USD",
+    "expected": "$9,007,199,254,740,993.12"
+  }
+]

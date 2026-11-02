@@ -33,6 +33,7 @@ from shelfsense_api.db import (
 )
 from shelfsense_api.llm import ModelError
 from shelfsense_api.messages import EnrichRequest, IndexRequest
+from shelfsense_api.money import format_money
 from shelfsense_api.normalize import shoe_size_eu
 from shelfsense_api.schemas import ApiProblem, ProblemCode
 from shelfsense_api.settings import settings
@@ -366,11 +367,12 @@ def _search_item(hit: search.Hit, debug: bool) -> schemas.SearchItem:
 
 
 def _price_label(lo: int | None, hi: int | None) -> str:
+    # Facet buckets are in minor units without a currency; the catalog is USD today.
     if lo is None:
-        return f"Under {hi / 100:.2f}"  # display only: amounts stay integers everywhere else
+        return f"Under {format_money(hi or 0, 'USD')}"
     if hi is None:
-        return f"{lo / 100:.2f} and up"
-    return f"{lo / 100:.2f}–{hi / 100:.2f}"
+        return f"{format_money(lo, 'USD')} and up"
+    return f"{format_money(lo, 'USD')}–{format_money(hi, 'USD')}"
 
 
 def _decode(after: str, scope: dict[str, Any]) -> dict[str, Any]:
