@@ -1,22 +1,14 @@
-import type { Facet, QueryParse } from "@/lib/api";
+import type { Facet } from "@/lib/api";
 import type { SearchState } from "@/lib/search-state";
-import { understood } from "@/lib/understood";
 
 const TITLES: Record<string, string> = { brand: "Brand", color: "Colour", category_id: "Category", price: "Price" };
 
-export function FacetSidebar({ facets, state, parse, onToggle }: {
-  facets: Facet[]; state: SearchState; parse?: QueryParse | null;
+export function FacetSidebar({ facets, state, onToggle }: {
+  facets: Facet[]; state: SearchState;
   onToggle: (facet: "brand" | "color" | "category_id" | "price", value: string) => void;
 }) {
-  const chips = understood(parse);
   return (
     <aside className="facets" aria-label="Filters">
-      {chips.length > 0 && (
-        <div className="understood" aria-label="Filters read from your search">
-          <b>From your search</b>
-          {chips.map((c) => <span key={c.label} className={`chip${c.relaxed ? " relaxed" : ""}`}>{c.label}</span>)}
-        </div>
-      )}
       {facets.map((facet) => (
         <section key={facet.name}>
           <h2>{TITLES[facet.name] ?? facet.name}</h2>

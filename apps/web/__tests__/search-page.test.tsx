@@ -61,7 +61,7 @@ test("load more sends the cursor and appends the next page", async () => {
   render(<SearchPage />);
   await user.click(await screen.findByRole("button", { name: "Load more" }));
 
-  expect(await screen.findByText("Trail Boot 3")).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Trail Boot 3/ })).toBeInTheDocument();
   expect(requests.at(-1)?.searchParams.get("cursor")).toBe("page-2");
   expect(screen.getAllByRole("link")).toHaveLength(1 + 3); // the logo, then the three products
   expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
