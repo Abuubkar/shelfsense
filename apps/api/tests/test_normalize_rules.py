@@ -17,7 +17,8 @@ from shelfsense_api.normalize import (
 @pytest.mark.parametrize(("raw", "base"), [
     ("blk", "black"), ("Blk/Wht", "black"), ("wht/gry", "white"), ("Charcoal Heather", "gray"), ("GREY", "gray"),
     ("nvy", "navy"), ("Olive Drab", "green"), ("teal", "blue"), ("Assorted", "multicolor"), ("tan", "beige"),
-    ("burgundy", "red"), ("Heather", None), ("", None), (None, None),
+    ("burgundy", "red"), ("Colour: orange.", "orange"), ("(Navy)", "navy"), ("Heather", None), ("", None),
+    (None, None),
 ])
 def test_colour_abbreviations_map_to_the_base_palette(raw: str | None, base: str | None) -> None:
     assert normalize_color(raw) == base

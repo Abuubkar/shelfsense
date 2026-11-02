@@ -51,3 +51,9 @@ Improvements found and deliberately not done yet, with the suggested fix and its
 - **Seeds aren't enriched or indexed** (slice 4). 300k seed and bulk-feed products sit in Postgres only; search
   covers the 45 enriched ones. Slice 6's eval enriches its golden subset; indexing all of them takes ~15 min of CPU
   embedding (see "Embedding the query blocks a thread").
+- **`category_hint` isn't used** (slice 5a). The parse returns it ("hiking boots") but search ignores it, since a
+  wrong hard filter would empty the page. Try it as a ranking signal or a suggested facet once slice 6 can measure.
+- **No gender or material facets in responses** (slice 5a). They're filterable (and indexed), but adding values to
+  the response's facet-name enum is a contract change; do it with the UI in slice 5b if a concept needs them.
+- **Enrichment ~6.5 s per product** (slice 5a). Generating the attribute JSON dominates. Shorter keys, dropping
+  `unit` for non-lengths, or logprobs only on the category token would cut output and time; measure with the eval.

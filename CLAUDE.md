@@ -13,12 +13,13 @@ Marketplace catalog enrichment and search: messy supplier feeds in, classified p
 ## Run it
 
 ```bash
-docker compose up -d --wait                  # Postgres 18 + pgvector :5436, OpenSearch 3.9 :9201, Floci (SQS, S3) :4566
+docker compose up -d --wait                  # Postgres :5436, OpenSearch :9201, Floci (SQS, S3) :4566, Redis :6380
 uv run alembic upgrade head
 uv run python scripts/init_aws.py            # feeds bucket, enrich and index queues with DLQs; a rerun is a no-op
 make taxonomy                                # only to fetch a new release; 2021-09-21 is committed
 uv run python scripts/load_taxonomy.py       # embeds 5,595 taxonomy paths (~1 min on CPU); a rerun is a no-op
 ollama pull qwen2.5:7b-instruct              # once; Ollama runs natively on the Mac, not in Docker
+ollama pull qwen2.5:3b-instruct              # once; the query-parsing model
 uv run uvicorn shelfsense_api.main:app --port 8020
 uv run python -m shelfsense_worker_enrich    # one per Ollama; LLM_MAX_CONCURRENCY = OLLAMA_NUM_PARALLEL
 uv run python -m shelfsense_worker_index
@@ -32,6 +33,8 @@ uv run python scripts/import_supplier.py ridgeway http://localhost:8030 --verify
 uv run python scripts/seed.py --profile small|large [--feed [--commit-feed]] [--reset]  # 5k / 200k from ground truth
 uv run python scripts/taxonomy_upgrade.py <release file> [--status|--reindex]  # docs/migrations.md B
 uv run python -u scripts/search_loop.py      # keeps reading through the API during a migration; counts errors
+uv run python scripts/attributes_report.py --sample 20 [--enqueue]   # extracted attributes, evidence, accuracy
+uv run python scripts/query_demo.py [--fresh]  # 10 natural-language queries: parse source, filters, results
 make smoke                                   # 5 searches + deep paging + GraphQL, via the generated client
 make test                                    # unit tests, offline
 make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)
@@ -43,8 +46,9 @@ make contract-check                          # oasdiff: the code's spec vs contr
 ## Rules that are easy to break
 
 - Postgres is the source of truth. Search indexes and caches (later slices) are rebuilt from it, never the reverse.
-- Every extracted attribute must carry an evidence span: an exact substring of the product text. One that
-  doesn't is dropped before it's stored.
+- Every extracted attribute must carry an evidence span: an exact substring of the field it names, located in code
+  (`attributes.ground`), with its value normalized from the quote, not taken from the model. One that doesn't
+  ground is dropped and counted on the enrichment run (ADR 0015).
 - Money is integer minor units + ISO currency (ADR 0003). Never floats, never rounding.
 - Model name and options come from settings. Prompts live only in `prompts.py`; any wording change bumps its
   version.
@@ -62,8 +66,11 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - Search (ADR 0006): the result set is lexical OR radial k-NN after filters; the head (50) is hybrid + rerank, the
   tail is `search_after` on the same PIT excluding the head. Every query of one search reads its PIT, and a PIT
   sort always ends with the `product_id` tiebreaker. Don't store the head in the cursor; re-run it on the PIT.
-- OpenSearch is derived data: change the mapping by adding `products_v2` and moving the alias (slice 6), never
-  by editing `products_v1` in place.
+- OpenSearch is derived data: change or remove a field by adding `products_v2` and moving the alias (slice 6).
+  Adding new fields in place is allowed (`search.NEW_FIELDS`, PUT _mapping); existing fields are never redefined.
+- Query understanding goes through `query.understand` (rules fast path, Redis cache, small model under
+  `QUERY_TIMEOUT_S`, degrade on any failure) and never raises. Page 1's parse travels in the cursor; never
+  re-parse on later pages (ADR 0014).
 - Embedding and reranking go through `embeddings.py` (bge-small, bge-reranker-base); never load a fastembed model
   elsewhere.
 - Feed rejections use spreadsheet row numbers (header = row 1), counted per CSV record, not per line.

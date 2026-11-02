@@ -52,11 +52,18 @@ def locate(text: str, quote: str) -> tuple[int, int] | None:
     return None
 
 
+def stated_value(quote: str) -> str:
+    """The value part of a quote copied from supplier attributes: "gender: Unisex" states "Unisex"."""
+    match = re.fullmatch(r"\s*[A-Za-z_ ]{1,24}:\s*(.+?)\s*", quote)
+    return match.group(1) if match else quote
+
+
 def normalized_value(name: str, quote: str, value: str, unit: str | None) -> tuple[str, str | None] | None:
     """The attribute's normalized value and unit, read from the quote. The model's own value only helps where the
     quote supports it: a material named in the quote, or a size whose number is in the quote ("size: 8" with
     "US 8" when the listing elsewhere says US sizing). Anything else would be the model's word, not the
     listing's."""
+    quote = stated_value(quote)
     if name == "color":
         color = normalize_color(quote)
         return (color, None) if color else None

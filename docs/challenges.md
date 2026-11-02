@@ -197,3 +197,43 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
   Profiling one 4,000-row file: most of the time is SQLAlchemy compiling and executing 500-row multi-VALUES
   statements (products, then product_attributes).
 - **What we did.** Kept the one write path; parked COPY into a staging table in docs/backlog.md.
+
+## Slice 5a
+
+### A grounded quote can still carry a made-up value
+
+- **Problem.** For "Packable 2.5L shell" the model returned material "none" with the quote "2.5L shell". The
+  quote was really in the description, so a substring check passed, and the first version of the code fell back
+  to the model's value and stored material = "none".
+- **What we did.** The value is now derived from the quote (normalize.py); the model's value only helps where the
+  quote supports it. "2.5L shell" names no material, so it's dropped and counted as unnormalized (ADR 0015).
+
+### Prefix reuse looked broken because the model download was running
+
+- **Problem.** The first enrichment runs showed ~2.3 s of prompt processing per product for a ~2,000-token prompt
+  whose 1,600-token system part never changes: as if Ollama recomputed it every time.
+- **What we did.** Measured again with nothing else running: 1,640 prompt tokens in ~350 ms on every call after
+  the first, so the prefix is reused. The earlier numbers were taken while `ollama pull qwen2.5:3b-instruct` was
+  downloading. Generation (~120 tokens of attribute JSON at ~20 tok/s) is the real cost.
+
+### The 3B model's slips
+
+- **Problem.** qwen2.5:3b read "size 8" as a letter size although the prompt says a bare number is US, filled
+  `price_min: 0` for "under $120", and sometimes dropped a product word ("waterproof") from the keywords.
+- **What we did.** The first two are deterministic, so code fixes them after the call (a numeric "alpha" size is
+  US; a minimum of 0 is no minimum). Dropped keywords are left for the slice 6 eval to measure.
+
+### The first query after a start always degraded
+
+- **Problem.** Loading the 3B model takes longer than the 2.5 s limit, so the first parse after Ollama unloads
+  it times out.
+- **What we did.** The API warms the query model in the background at startup, and the model's keep-alive is
+  30 minutes. A cold model still degrades cleanly; it just shouldn't be the normal case.
+
+### Later pages must not re-parse
+
+- **Problem.** If page 2 parsed the query again, a cache expiry or a different model answer would change its
+  filters, so the signed cursor (bound to the query and filters) would be rejected, or worse, page through a
+  different result set.
+- **What we did.** Page 1's parse travels inside the cursor (`carry`), and the cursor is bound to what the client
+  sent (q, explicit filters, `parse`). Later pages reuse the parse as is.
