@@ -85,6 +85,27 @@ class ProductAttribute(Base):
     value: Mapped[str]
 
 
+class ProductExtractedAttribute(Base):
+    """An attribute the model read from the listing, with the exact quote that states it: fields[evidence_field]
+    [evidence_start:evidence_end] == evidence_text (code point offsets). Kept apart from the supplier's own
+    product_attributes, and replaced whenever the product is enriched again."""
+
+    __tablename__ = "product_extracted_attributes"
+
+    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(16), primary_key=True)
+    value: Mapped[str]
+    unit: Mapped[str | None] = mapped_column(String(8))
+    evidence_field: Mapped[str] = mapped_column(String(16))
+    evidence_start: Mapped[int]
+    evidence_end: Mapped[int]
+    evidence_text: Mapped[str]
+    content_hash: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str]
+    prompt_version: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Feed(Base):
     """One uploaded feed file. Its bytes live in the feeds bucket under the feed's ID; the hash and counts are
     filled in when it's committed. Committing it again changes nothing."""
@@ -184,6 +205,9 @@ class EnrichmentRun(Base):
     output_tokens: Mapped[int | None]
     # Wall-clock time of the call as the worker saw it, queueing inside Ollama included.
     wall_ms: Mapped[int]
+    # Attributes the reply named but couldn't back with an exact quote, or whose value meant nothing known.
+    ungrounded_attributes: Mapped[int | None]
+    unnormalized_attributes: Mapped[int | None]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 

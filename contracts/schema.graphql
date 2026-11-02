@@ -13,6 +13,16 @@ type Category {
   promptVersion: String!
 }
 
+type ExtractedAttribute {
+  name: String!
+  value: String!
+  unit: String
+  evidenceField: String!
+  evidenceStart: Int!
+  evidenceEnd: Int!
+  evidenceText: String!
+}
+
 type Facet {
   name: String!
   values: [FacetValue!]!
@@ -47,6 +57,22 @@ type PageInfo {
   endCursor: String
 }
 
+type ParsedFilters {
+  priceMin: Int
+  priceMax: Int
+  colors: [String!]!
+  excludeColors: [String!]!
+  materials: [String!]!
+  excludeMaterials: [String!]!
+  gender: String
+  size: ParsedSize
+}
+
+type ParsedSize {
+  system: String!
+  value: String!
+}
+
 type Product {
   id: UUID!
   supplier: String!
@@ -62,6 +88,7 @@ type Product {
   gender: String
   sizeSystem: String
   sizeValue: String
+  extractedAttributes: [ExtractedAttribute!]!
   category: Category
 }
 
@@ -89,7 +116,16 @@ type Query {
   products(first: Int! = 25, after: String = null, supplier: String = null, categoryId: Int = null): ProductConnection!
 
   """Faceted hybrid search; the same results and order as GET /v1/search."""
-  search(query: String! = "", filters: SearchFilters = null, first: Int! = 24, after: String = null, debug: Boolean! = false): SearchConnection!
+  search(query: String! = "", filters: SearchFilters = null, first: Int! = 24, after: String = null, debug: Boolean! = false, parse: Boolean! = true): SearchConnection!
+}
+
+type QueryParse {
+  source: String!
+  keywords: String!
+  categoryHint: String
+  filters: ParsedFilters!
+  priceRelaxed: Boolean!
+  ms: Int!
 }
 
 type Score {
@@ -105,6 +141,7 @@ type SearchConnection {
   edges: [SearchResultEdge!]!
   total: Int!
   facets: [Facet!]!
+  queryParse: QueryParse
 }
 
 """Facet filters: values within one field are OR'ed, fields are AND'ed."""

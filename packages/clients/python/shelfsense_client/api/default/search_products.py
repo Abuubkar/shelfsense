@@ -21,6 +21,7 @@ def _get_kwargs(
     page_size: int | Unset = 24,
     cursor: str | Unset = UNSET,
     debug: bool | Unset = False,
+    parse: bool | Unset = True,
 ) -> dict[str, Any]:
 
     params: dict[str, Any] = {}
@@ -54,6 +55,8 @@ def _get_kwargs(
     params["cursor"] = cursor
 
     params["debug"] = debug
+
+    params["parse"] = parse
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -113,6 +116,7 @@ def sync_detailed(
     page_size: int | Unset = 24,
     cursor: str | Unset = UNSET,
     debug: bool | Unset = False,
+    parse: bool | Unset = True,
 ) -> Response[Problem | SearchResponse]:
     """Faceted hybrid search over products
 
@@ -132,6 +136,7 @@ def sync_detailed(
         page_size (int | Unset):  Default: 24.
         cursor (str | Unset):
         debug (bool | Unset):  Default: False.
+        parse (bool | Unset):  Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -151,6 +156,7 @@ def sync_detailed(
         page_size=page_size,
         cursor=cursor,
         debug=debug,
+        parse=parse,
     )
 
     response = client.get_httpx_client().request(
@@ -172,6 +178,7 @@ def sync(
     page_size: int | Unset = 24,
     cursor: str | Unset = UNSET,
     debug: bool | Unset = False,
+    parse: bool | Unset = True,
 ) -> Problem | SearchResponse | None:
     """Faceted hybrid search over products
 
@@ -191,6 +198,7 @@ def sync(
         page_size (int | Unset):  Default: 24.
         cursor (str | Unset):
         debug (bool | Unset):  Default: False.
+        parse (bool | Unset):  Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -211,6 +219,7 @@ def sync(
         page_size=page_size,
         cursor=cursor,
         debug=debug,
+        parse=parse,
     ).parsed
 
 
@@ -226,6 +235,7 @@ async def asyncio_detailed(
     page_size: int | Unset = 24,
     cursor: str | Unset = UNSET,
     debug: bool | Unset = False,
+    parse: bool | Unset = True,
 ) -> Response[Problem | SearchResponse]:
     """Faceted hybrid search over products
 
@@ -245,6 +255,7 @@ async def asyncio_detailed(
         page_size (int | Unset):  Default: 24.
         cursor (str | Unset):
         debug (bool | Unset):  Default: False.
+        parse (bool | Unset):  Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -264,6 +275,7 @@ async def asyncio_detailed(
         page_size=page_size,
         cursor=cursor,
         debug=debug,
+        parse=parse,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -283,6 +295,7 @@ async def asyncio(
     page_size: int | Unset = 24,
     cursor: str | Unset = UNSET,
     debug: bool | Unset = False,
+    parse: bool | Unset = True,
 ) -> Problem | SearchResponse | None:
     """Faceted hybrid search over products
 
@@ -302,6 +315,7 @@ async def asyncio(
         page_size (int | Unset):  Default: 24.
         cursor (str | Unset):
         debug (bool | Unset):  Default: False.
+        parse (bool | Unset):  Default: True.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -323,5 +337,6 @@ async def asyncio(
             page_size=page_size,
             cursor=cursor,
             debug=debug,
+            parse=parse,
         )
     ).parsed

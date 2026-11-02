@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     # anything beyond it, so more only burns visibility-timeout time.
     llm_max_concurrency: int = 1
 
+    # Query understanding is user-facing: a small model, a short context, and a hard time limit after which
+    # search runs without the parse (docs/adr/0014).
+    query_model: str = "qwen2.5:3b-instruct"
+    query_num_ctx: int = 2048
+    query_timeout_s: float = 2.5
+    # Long enough that the model stays loaded between shoppers' queries; a cold load takes longer than the limit.
+    query_keep_alive: str = "30m"
+    redis_url: str = "redis://localhost:6380/0"
+    query_cache_ttl_s: int = 24 * 3600
+
     # SQS and S3. Locally that's Floci (docs/adr/0008); leave aws_endpoint_url empty for real AWS.
     aws_endpoint_url: str | None = "http://localhost:4566"
     aws_region: str = "us-east-1"

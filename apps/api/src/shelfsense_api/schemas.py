@@ -4,6 +4,7 @@ and `make contract-check` fails if they drift in a way that would break a client
 import enum
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -98,6 +99,16 @@ class Category(BaseModel):
     total_ms: int
 
 
+class ExtractedAttribute(BaseModel):
+    name: str
+    value: str
+    unit: str | None
+    evidence_field: str
+    evidence_start: int
+    evidence_end: int
+    evidence_text: str
+
+
 class Product(BaseModel):
     id: uuid.UUID
     supplier: str
@@ -113,6 +124,7 @@ class Product(BaseModel):
     gender: str | None
     size_system: str | None
     size_value: str | None
+    extracted_attributes: list[ExtractedAttribute]
     category: Category | None
 
 
@@ -169,12 +181,38 @@ class SearchDebug(BaseModel):
     knn_min_score: float
 
 
+class ParsedSize(BaseModel):
+    system: Literal["US", "UK", "EU", "alpha"]
+    value: str
+
+
+class ParsedFilters(BaseModel):
+    price_min: int | None
+    price_max: int | None
+    colors: list[str]
+    exclude_colors: list[str]
+    materials: list[str]
+    exclude_materials: list[str]
+    gender: str | None
+    size: ParsedSize | None
+
+
+class QueryParse(BaseModel):
+    source: Literal["rules", "cache", "llm", "degraded"]
+    keywords: str
+    category_hint: str | None
+    filters: ParsedFilters
+    price_relaxed: bool
+    ms: int
+
+
 class SearchResponse(BaseModel):
     items: list[SearchItem]
     total: int
     facets: list[Facet]
     next_cursor: str | None
     debug: SearchDebug | None = None
+    query_parse: QueryParse | None = None
 
 
 class WorkQueue(enum.StrEnum):

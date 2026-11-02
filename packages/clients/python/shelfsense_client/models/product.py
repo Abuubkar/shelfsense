@@ -9,6 +9,7 @@ from attrs import field as _attrs_field
 
 if TYPE_CHECKING:
     from ..models.category import Category
+    from ..models.extracted_attribute import ExtractedAttribute
     from ..models.money import Money
     from ..models.product_attributes import ProductAttributes
 
@@ -35,6 +36,8 @@ class Product:
         gender (None | str): men, women, unisex or kids.
         size_system (None | str): US, UK, EU (shoe sizes) or alpha (XS-XXXL, ONE SIZE).
         size_value (None | str):
+        extracted_attributes (list[ExtractedAttribute]): Attributes the model read from the listing, each with the exact
+            quote that states it.
         category (Category | None):
     """
 
@@ -52,6 +55,7 @@ class Product:
     gender: None | str
     size_system: None | str
     size_value: None | str
+    extracted_attributes: list[ExtractedAttribute]
     category: Category | None
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
@@ -94,6 +98,11 @@ class Product:
         size_value: None | str
         size_value = self.size_value
 
+        extracted_attributes = []
+        for extracted_attributes_item_data in self.extracted_attributes:
+            extracted_attributes_item = extracted_attributes_item_data.to_dict()
+            extracted_attributes.append(extracted_attributes_item)
+
         category: dict[str, Any] | None
         if isinstance(self.category, Category):
             category = self.category.to_dict()
@@ -118,6 +127,7 @@ class Product:
                 "gender": gender,
                 "size_system": size_system,
                 "size_value": size_value,
+                "extracted_attributes": extracted_attributes,
                 "category": category,
             }
         )
@@ -127,6 +137,7 @@ class Product:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.category import Category  # noqa: PLC0415
+        from ..models.extracted_attribute import ExtractedAttribute  # noqa: PLC0415
         from ..models.money import Money  # noqa: PLC0415
         from ..models.product_attributes import ProductAttributes  # noqa: PLC0415
 
@@ -199,6 +210,13 @@ class Product:
 
         size_value = _parse_size_value(d.pop("size_value"))
 
+        extracted_attributes = []
+        _extracted_attributes = d.pop("extracted_attributes")
+        for extracted_attributes_item_data in _extracted_attributes:
+            extracted_attributes_item = ExtractedAttribute.from_dict(extracted_attributes_item_data)
+
+            extracted_attributes.append(extracted_attributes_item)
+
         def _parse_category(data: object) -> Category | None:
             if data is None:
                 return data
@@ -229,6 +247,7 @@ class Product:
             gender=gender,
             size_system=size_system,
             size_value=size_value,
+            extracted_attributes=extracted_attributes,
             category=category,
         )
 

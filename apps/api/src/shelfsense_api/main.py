@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -9,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from shelfsense_api import schemas, search, service
+from shelfsense_api import query, schemas, search, service
 from shelfsense_api.db import get_session
 from shelfsense_api.graphql import graphql_router
 from shelfsense_api.schemas import ApiProblem, Problem, ProblemCode
@@ -17,11 +18,13 @@ from shelfsense_api.schemas import ApiProblem, Problem, ProblemCode
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    warming = asyncio.create_task(query.warm())  # in the background: startup doesn't wait for the model
     yield
+    warming.cancel()
     await search.client().close()
 
 
-app = FastAPI(title="Shelfsense", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="Shelfsense", version="0.5.0", lifespan=lifespan)
 app.include_router(graphql_router, prefix="/graphql")
 
 PROBLEM_JSON = "application/problem+json"
@@ -105,9 +108,10 @@ async def search_products(
     page_size: Annotated[int, Query(ge=1, le=48)] = 24,
     cursor: str | None = None,
     debug: bool = False,
+    parse: bool = True,
 ) -> schemas.SearchResponse:
     filters = search.Filters(tuple(brand), tuple(color), tuple(category_id), price_min, price_max)
-    return await service.search_products(session, search.client(), q, filters, page_size, cursor, debug)
+    return await service.search_products(session, search.client(), q, filters, page_size, cursor, debug, parse)
 
 
 @app.post("/v1/admin/dlq/{queue}/redrive", operation_id="redriveDeadLetters", responses=_problems(400, 409, 503))

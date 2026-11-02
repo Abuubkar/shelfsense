@@ -54,7 +54,7 @@ def model_stub(stats: Counter[str], timeout_s: float, seed: int = 3) -> FastAPI:
 
 
 def _reply(category_id: str) -> JSONResponse:
-    content = json.dumps({"category_id": category_id})
+    content = json.dumps({"category_id": category_id, "attributes": []})
     logprobs = [{"token": '{"category_id": "', "logprob": 0.0}, {"token": category_id, "logprob": -0.05},
                 {"token": '"}', "logprob": 0.0}]
     return JSONResponse({"model": "chaos-stub", "created_at": "2026-11-02T00:00:00Z",

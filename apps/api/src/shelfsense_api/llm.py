@@ -35,24 +35,45 @@ class ModelReply:
     eval_ms: int
 
 
-async def chat_json(system: str, user: str, schema: dict[str, Any],
-                    follow_up: list[dict[str, str]] | None = None) -> ModelReply:
-    """One constrained chat call. `follow_up` continues the conversation after `user`, e.g. the model's rejected
-    reply and the reason it was rejected."""
+@dataclass(frozen=True)
+class ModelConfig:
+    """Which model to call and how; every value comes from settings."""
+
+    model: str
+    num_ctx: int
+    timeout_s: float
+    keep_alive: str
+    logprobs: bool = True
+
+
+def enrich_model() -> ModelConfig:
+    return ModelConfig(settings.llm_model, settings.llm_num_ctx, settings.llm_timeout_s, settings.llm_keep_alive)
+
+
+def query_model() -> ModelConfig:
+    return ModelConfig(settings.query_model, settings.query_num_ctx, settings.query_timeout_s,
+                       settings.query_keep_alive, logprobs=False)
+
+
+async def chat_json(system: str, user: str, schema: dict[str, Any], follow_up: list[dict[str, str]] | None = None,
+                    config: ModelConfig | None = None) -> ModelReply:
+    """One constrained chat call (the enrichment model unless `config` says otherwise). `follow_up` continues the
+    conversation after `user`, e.g. the model's rejected reply and the reason it was rejected."""
+    config = config or enrich_model()
     client = ollama.AsyncClient(host=settings.ollama_host)
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}, *(follow_up or [])]
     try:
-        async with asyncio.timeout(settings.llm_timeout_s):
+        async with asyncio.timeout(config.timeout_s):
             response = await client.chat(
-                model=settings.llm_model,
+                model=config.model,
                 messages=messages,
                 format=schema,
-                logprobs=True,
-                options={"temperature": settings.llm_temperature, "num_ctx": settings.llm_num_ctx},
-                keep_alive=settings.llm_keep_alive,
+                logprobs=config.logprobs,
+                options={"temperature": settings.llm_temperature, "num_ctx": config.num_ctx},
+                keep_alive=config.keep_alive,
             )
     except TimeoutError:
-        raise ModelError("model_timeout", f"no reply within {settings.llm_timeout_s:.0f}s") from None
+        raise ModelError("model_timeout", f"no reply within {config.timeout_s:g}s") from None
     except ollama.ResponseError as exc:
         # 5xx (Ollama overloaded or crashed) may pass; a 4xx (unknown model, bad request) won't.
         code = "model_unavailable" if exc.status_code >= 500 else "model_request_rejected"
@@ -62,8 +83,8 @@ async def chat_json(system: str, user: str, schema: dict[str, Any],
 
     prompt_tokens = response.prompt_eval_count or 0
     # Ollama cuts an over-long prompt to num_ctx without an error; a prompt that fills the window was cut.
-    if prompt_tokens >= settings.llm_num_ctx:
-        raise ModelError("prompt_truncated", f"prompt filled num_ctx {settings.llm_num_ctx}")
+    if prompt_tokens >= config.num_ctx:
+        raise ModelError("prompt_truncated", f"prompt filled num_ctx {config.num_ctx}")
     if response.done_reason == "length":
         raise ModelError("output_truncated", "the model hit its output limit")
     content = response.message.content or ""
@@ -75,7 +96,7 @@ async def chat_json(system: str, user: str, schema: dict[str, Any],
     return ModelReply(
         answer=answer,
         tokens=[(lp.token, lp.logprob) for lp in response.logprobs or []],
-        model=response.model or settings.llm_model,
+        model=response.model or config.model,
         prompt_tokens=prompt_tokens,
         output_tokens=response.eval_count or 0,
         total_ms=(response.total_duration or 0) // 1_000_000,

@@ -58,9 +58,16 @@ _MATERIALS = {"poly": "polyester", "polyester": "polyester", "pes": "polyester",
               "bamboo": "bamboo", "wood": "wood", "glass": "glass", "down": "down", "fleece": "fleece",
               "canvas": "canvas", "mesh": "mesh", "foam": "foam", "pvc": "pvc", "tpu": "tpu"}
 
+# Vocabularies other modules match against (the query fast path). The canonical material names are what a known
+# material normalizes to.
+KNOWN_MATERIALS = frozenset(_MATERIALS.values())
+COLOR_WORDS = frozenset(_COLOR_WORDS)
+GENDER_WORDS = frozenset(_GENDERS)
+
 _ALPHA_SIZES = {"xxs": "XXS", "xs": "XS", "s": "S", "small": "S", "m": "M", "med": "M", "medium": "M", "l": "L",
                 "lg": "L", "large": "L", "xl": "XL", "xxl": "XXL", "2xl": "XXL", "xxxl": "XXXL", "3xl": "XXXL",
                 "os": "ONE SIZE", "one size": "ONE SIZE", "onesize": "ONE SIZE"}
+ALPHA_SIZE_WORDS = frozenset(_ALPHA_SIZES)
 _SHOE_SIZE = re.compile(r"^(?:(us|eu|eur|uk)\s*(?:m|w|men'?s|women'?s)?\s*(\d{1,2}(?:[.,]5)?)|"
                         r"(\d{1,2}(?:[.,]5)?)\s*(us|eu|eur|uk))$", re.IGNORECASE)
 

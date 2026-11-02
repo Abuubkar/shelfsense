@@ -52,6 +52,17 @@ class Attribute:
 
 
 @strawberry.type
+class ExtractedAttribute:
+    name: str
+    value: str
+    unit: str | None
+    evidence_field: str
+    evidence_start: int  # Unicode code points
+    evidence_end: int
+    evidence_text: str
+
+
+@strawberry.type
 class Product:
     id: uuid.UUID
     supplier: str
@@ -67,6 +78,7 @@ class Product:
     gender: str | None
     size_system: str | None
     size_value: str | None
+    extracted_attributes: list[ExtractedAttribute]
     category: Category | None
 
     @classmethod
@@ -78,6 +90,7 @@ class Product:
             attributes=[Attribute(name=k, value=v) for k, v in sorted(p.attributes.items())],
             color_base=p.color_base, material=p.material, gender=p.gender, size_system=p.size_system,
             size_value=p.size_value,
+            extracted_attributes=[ExtractedAttribute(**a.model_dump()) for a in p.extracted_attributes],
             category=None if c is None else Category(
                 taxonomy_version=c.taxonomy_version, node_id=c.node_id, full_path=c.full_path,
                 confidence=c.confidence, model=c.model, prompt_version=c.prompt_version),
@@ -144,9 +157,47 @@ class ProductConnection(relay.Connection[Product]):  # type: ignore[type-var]
 
 
 @strawberry.type
+class ParsedSize:
+    system: str
+    value: str
+
+
+@strawberry.type
+class ParsedFilters:
+    price_min: int | None
+    price_max: int | None
+    colors: list[str]
+    exclude_colors: list[str]
+    materials: list[str]
+    exclude_materials: list[str]
+    gender: str | None
+    size: ParsedSize | None
+
+
+@strawberry.type
+class QueryParse:
+    source: str  # rules, cache, llm or degraded
+    keywords: str
+    category_hint: str | None
+    filters: ParsedFilters
+    price_relaxed: bool
+    ms: int
+
+    @classmethod
+    def of(cls, q: schemas.QueryParse) -> "QueryParse":
+        f = q.filters
+        return cls(source=q.source, keywords=q.keywords, category_hint=q.category_hint, price_relaxed=q.price_relaxed,
+                   ms=q.ms, filters=ParsedFilters(
+                       price_min=f.price_min, price_max=f.price_max, colors=f.colors, exclude_colors=f.exclude_colors,
+                       materials=f.materials, exclude_materials=f.exclude_materials, gender=f.gender,
+                       size=ParsedSize(system=f.size.system, value=f.size.value) if f.size else None))
+
+
+@strawberry.type
 class SearchConnection(relay.Connection[SearchResult]):  # type: ignore[type-var]
     total: int
     facets: list[Facet]
+    query_parse: QueryParse | None
 
 
 def _page_info(cursors: list[str], after: str | None, has_next: bool) -> relay.PageInfo:
@@ -184,13 +235,14 @@ class Query:
 
     @strawberry.field(description="Faceted hybrid search; the same results and order as GET /v1/search.")
     async def search(self, info: strawberry.Info[Context], query: str = "", filters: SearchFilters | None = None,
-                     first: int = 24, after: str | None = None, debug: bool = False) -> SearchConnection:
+                     first: int = 24, after: str | None = None, debug: bool = False,
+                     parse: bool = True) -> SearchConnection:
         _check_first(first, 48)
         f = filters or SearchFilters()
         response, cursors = await service.search_page(
             info.context.session, search.client(), query,
             search.Filters(tuple(f.brand), tuple(f.color), tuple(f.category_id), f.price_min, f.price_max),
-            first, after, debug,
+            first, after, debug, parse,
         )
         return SearchConnection(
             edges=[relay.Edge(node=SearchResult.of(i), cursor=c) for i, c in zip(response.items, cursors, strict=True)],  # type: ignore[type-var]
@@ -198,6 +250,7 @@ class Query:
             total=response.total,
             facets=[Facet(name=fa.name.value, values=[FacetValue(value=v.value, label=v.label, count=v.count)
                                                       for v in fa.values]) for fa in response.facets],
+            query_parse=QueryParse.of(response.query_parse) if response.query_parse else None,
         )
 
 

@@ -6,6 +6,7 @@ import tempfile
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -13,9 +14,10 @@ from typing import Any
 from botocore.exceptions import BotoCoreError, ClientError
 from opensearchpy import AsyncOpenSearch
 from sqlalchemy import Select, func, select, update
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api import aws, cursor, feeds, schemas, search
+from shelfsense_api import aws, cursor, feeds, query, schemas, search
 from shelfsense_api.classify import classify_product, needs_enrichment
 from shelfsense_api.db import (
     DeadLetter,
@@ -25,11 +27,13 @@ from shelfsense_api.db import (
     Product,
     ProductAttribute,
     ProductCategory,
+    ProductExtractedAttribute,
     Supplier,
     TaxonomyNode,
 )
 from shelfsense_api.llm import ModelError
 from shelfsense_api.messages import EnrichRequest, IndexRequest
+from shelfsense_api.normalize import shoe_size_eu
 from shelfsense_api.schemas import ApiProblem, ProblemCode
 from shelfsense_api.settings import settings
 
@@ -176,8 +180,13 @@ def _products() -> Select[Any]:
     """Products with their supplier code, raw attributes, and category in the current taxonomy release."""
     attributes = (select(func.jsonb_object_agg(ProductAttribute.name, ProductAttribute.value))
                   .where(ProductAttribute.product_id == Product.id).scalar_subquery())
+    x = ProductExtractedAttribute
+    extracted = (select(func.jsonb_agg(aggregate_order_by(func.jsonb_build_object(
+        "name", x.name, "value", x.value, "unit", x.unit, "evidence_field", x.evidence_field,
+        "evidence_start", x.evidence_start, "evidence_end", x.evidence_end, "evidence_text", x.evidence_text,
+    ), x.name))).where(x.product_id == Product.id).scalar_subquery())
     return (
-        select(Product, Supplier.code, ProductCategory, TaxonomyNode.full_path, attributes)
+        select(Product, Supplier.code, ProductCategory, TaxonomyNode.full_path, attributes, extracted)
         .join(Supplier, Supplier.id == Product.supplier_id)
         .outerjoin(ProductCategory, (ProductCategory.product_id == Product.id)
                    & (ProductCategory.taxonomy_version == settings.taxonomy_version))
@@ -187,13 +196,14 @@ def _products() -> Select[Any]:
 
 
 def _product(row: Any) -> schemas.Product:
-    product, supplier, category, full_path, attributes = row
+    product, supplier, category, full_path, attributes, extracted = row
     return schemas.Product(
         id=product.id, supplier=supplier, supplier_sku=product.supplier_sku, title=product.title,
         description=product.description, brand=product.brand, gtin=product.gtin,
         price=schemas.Money(amount_minor=product.price_minor, currency=product.currency),
         attributes=attributes or {}, color_base=product.color_base, material=product.material,
         gender=product.gender, size_system=product.size_system, size_value=product.size_value,
+        extracted_attributes=[schemas.ExtractedAttribute(**a) for a in extracted or []],
         category=None if category is None else schemas.Category(
             full_path=full_path, **{f: getattr(category, f) for f in schemas.Category.model_fields if f != "full_path"}
         ),
@@ -250,16 +260,34 @@ async def enrich_product(session: AsyncSession, product_id: uuid.UUID) -> schema
 
 
 async def search_products(session: AsyncSession, os: AsyncOpenSearch, q: str, filters: search.Filters,
-                          page_size: int, after: str | None, debug: bool = False) -> schemas.SearchResponse:
-    response, _ = await search_page(session, os, q, filters, page_size, after, debug)
+                          page_size: int, after: str | None, debug: bool = False,
+                          parse: bool = True) -> schemas.SearchResponse:
+    response, _ = await search_page(session, os, q, filters, page_size, after, debug, parse)
     return response
 
 
 async def search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filters: search.Filters, page_size: int,
-                      after: str | None, debug: bool = False) -> tuple[schemas.SearchResponse, list[str]]:
-    """One search page and the cursor after each of its items (GraphQL puts one on every edge)."""
+                      after: str | None, debug: bool = False,
+                      parse: bool = True) -> tuple[schemas.SearchResponse, list[str]]:
+    """One search page and the cursor after each of its items (GraphQL puts one on every edge). With `parse`, the
+    query text is read for filters first (query.understand). Page 1's parse travels in the cursor, so later pages
+    search exactly the same way even if the model would now answer differently, or the cache has expired."""
+    scope = {"q": " ".join(q.split()), "filters": asdict(filters), "parse": parse}
+    parsed: query.QueryParse | None = None
+    if parse and q.strip():
+        carried = _decode(after, scope).get("carry") if after else None
+        parsed = query.QueryParse.model_validate(carried) if carried else await query.understand(q)
+    keywords, effective = apply_parse(parsed, q, filters)
+
     try:
-        page = await search.search(os, q, filters, page_size, after, debug)
+        page = await search.search(os, keywords, effective, page_size, after, debug, scope=scope,
+                                   carry=parsed.model_dump() if parsed else None)
+        if parsed and not after and page.total == 0 and _parsed_price_applied(parsed, filters):
+            # A parsed price range that matches nothing would be a dead end: drop it and say so.
+            parsed = parsed.model_copy(update={"price_relaxed": True})
+            keywords, effective = apply_parse(parsed, q, filters)
+            page = await search.search(os, keywords, effective, page_size, None, debug, scope=scope,
+                                       carry=parsed.model_dump())
     except cursor.InvalidCursor as exc:
         raise ApiProblem(400, ProblemCode.INVALID_CURSOR, "Invalid cursor", str(exc)) from exc
     except search.CursorExpired as exc:
@@ -285,8 +313,46 @@ async def search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filter
         debug=schemas.SearchDebug(timings_ms=page.timings_ms, head_size=search.HEAD_SIZE,
                                   hybrid_weights=list(settings.hybrid_weights),
                                   knn_min_score=settings.knn_min_score) if debug else None,
+        query_parse=schemas.QueryParse.model_validate(parsed.model_dump()) if parsed else None,
     )
     return response, page.cursors
+
+
+def _parsed_price_applied(parsed: query.QueryParse, explicit: search.Filters) -> bool:
+    """Whether the search used a price from the parse (an explicit price parameter overrides it)."""
+    f = parsed.filters
+    return (f.price_min is not None and explicit.price_min is None) or (
+        f.price_max is not None and explicit.price_max is None)
+
+
+def apply_parse(parsed: query.QueryParse | None, q: str, explicit: search.Filters) -> tuple[str, search.Filters]:
+    """The text to search and the filters to apply: the parse's keywords and filters, with the caller's explicit
+    filters winning for any facet they set. A gendered parse also matches unisex products; a shoe size is
+    compared in EU numbers. A relaxed parse leaves its price out."""
+    if parsed is None:
+        return q, explicit
+    f = parsed.filters
+    gender = (f.gender, "unisex") if f.gender in ("men", "women") else ((f.gender,) if f.gender else ())
+    size = size_eu = None
+    if f.size and f.size.system == "alpha":
+        size = f.size.value
+    elif f.size:
+        eu = shoe_size_eu(f.size.system, f.size.value, f.gender)
+        size_eu = float(eu) if eu is not None else None
+    price_min, price_max = (None, None) if parsed.price_relaxed else (f.price_min, f.price_max)
+    return parsed.keywords, search.Filters(
+        brand=explicit.brand,
+        color=explicit.color or tuple(f.colors),
+        category_id=explicit.category_id,
+        price_min=explicit.price_min if explicit.price_min is not None else price_min,
+        price_max=explicit.price_max if explicit.price_max is not None else price_max,
+        gender=explicit.gender or gender,
+        material=explicit.material or tuple(f.materials),
+        exclude_color=explicit.exclude_color or tuple(f.exclude_colors),
+        exclude_material=explicit.exclude_material or tuple(f.exclude_materials),
+        size=explicit.size or size,
+        size_eu=explicit.size_eu if explicit.size_eu is not None else size_eu,
+    )
 
 
 def _search_item(hit: search.Hit, debug: bool) -> schemas.SearchItem:
