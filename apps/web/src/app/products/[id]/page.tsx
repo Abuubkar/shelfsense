@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Evidence } from "@/components/Evidence";
 import { ProductTabs } from "@/components/ProductTabs";
-import { RankingModels } from "@/components/RankingModels";
+import { RankingInfo } from "@/components/RankingInfo";
 import { formatMoney } from "@/lib/money";
 import { loadProduct, rankingFor, rawAttributesText, similar, spansFor, specs, type Spec } from "@/lib/product";
 import { fromParams, toParams } from "@/lib/search-state";
@@ -80,7 +80,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
       ]} />
       <section className="section" aria-labelledby="ranking">
         <h2 id="ranking">How the ranking models saw it</h2>
-        {ranked ? <RankingModels item={ranked.item} items={ranked.items} />
+        {ranked ? <RankingInfo {...ranked} hrefFor={(other) => `/products/${other}?${toParams(search)}`} />
           : <p className="muted">Open this product from a search to see how each model ranked it.</p>}
       </section>
       <section className="section" aria-labelledby="similar">
