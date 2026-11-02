@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { Evidence } from "@/components/Evidence";
 import { ProductTabs } from "@/components/ProductTabs";
 import { RankingModels } from "@/components/RankingModels";
+import { RankingInfo } from "@/components/ranking/RankingInfo";
+import { RankJourney } from "@/components/ranking/RankJourney";
+import { RankTiles } from "@/components/ranking/RankTiles";
+import { VizSwitcher } from "@/components/ranking/VizSwitcher";
 import { formatMoney } from "@/lib/money";
 import { loadProduct, rankingFor, rawAttributesText, similar, spansFor, specs, type Spec } from "@/lib/product";
 import { fromParams, toParams } from "@/lib/search-state";
@@ -24,6 +28,7 @@ function SpecsTable({ rows }: { rows: Spec[] }) {
 
 export default async function ProductPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const viz = String((await searchParams).viz ?? "journey");
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(await searchParams)) for (const one of [v].flat()) if (one != null) query.append(k, one);
   const search = fromParams(query);
@@ -80,8 +85,12 @@ export default async function ProductPage({ params, searchParams }: Props) {
       ]} />
       <section className="section" aria-labelledby="ranking">
         <h2 id="ranking">How the ranking models saw it</h2>
-        {ranked ? <RankingModels item={ranked.item} items={ranked.items} />
-          : <p className="muted">Open this product from a search to see how each model ranked it.</p>}
+        {!ranked ? <p className="muted">Open this product from a search to see how each model ranked it.</p>
+          : viz === "info" ? <RankingInfo item={ranked.item} items={ranked.items} />
+          : viz === "tiles" ? <RankTiles item={ranked.item} items={ranked.items} weights={ranked.weights} />
+          : viz === "bars" ? <RankingModels item={ranked.item} items={ranked.items} />
+          : <RankJourney item={ranked.item} items={ranked.items} />}
+        {ranked && process.env.NODE_ENV !== "production" && <VizSwitcher current={viz} />}
       </section>
       <section className="section" aria-labelledby="similar">
         <h2 id="similar">Similar products</h2>
