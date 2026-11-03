@@ -1,10 +1,14 @@
 """The one way Shelfsense calls a model: Ollama, JSON-schema-constrained, with token and time accounting."""
 
 import asyncio
+import gzip
+import hashlib
 import json
 import math
-from dataclasses import dataclass
-from typing import Any
+import time
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any, Literal
 
 import ollama
 
@@ -55,13 +59,79 @@ def query_model() -> ModelConfig:
                        settings.query_keep_alive, logprobs=False)
 
 
+@dataclass
+class Cassette:
+    """Model replies recorded by prompt hash, so an eval can replay a live run without Ollama (evals/run.py). Off
+    unless an eval installs one with use_cassette. `calls` logs each call's key and recorded wall time, so replayed
+    latencies equal the live ones."""
+
+    path: Path
+    mode: Literal["record", "replay"]
+    entries: dict[str, dict[str, Any]] = field(default_factory=dict)
+    calls: list[tuple[str, int]] = field(default_factory=list)
+
+    def save(self) -> None:
+        with gzip.open(self.path, "wt", encoding="utf-8") as f:
+            for key in sorted(self.entries):
+                f.write(json.dumps(self.entries[key], sort_keys=True) + "\n")
+
+
+_cassette: Cassette | None = None
+
+
+def use_cassette(path: Path, mode: Literal["record", "replay"]) -> Cassette:
+    """Record model calls to `path` (gzipped JSON lines), or answer every call from it. Recording starts empty and
+    answers a prompt it has already recorded from the recording, so one run asks the model each prompt once."""
+    global _cassette
+    entries: dict[str, dict[str, Any]] = {}
+    if mode == "replay":
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            entries = {e["key"]: e for e in map(json.loads, f)}
+    _cassette = Cassette(path, mode, entries)
+    return _cassette
+
+
+def stop_cassette() -> None:
+    """Back to calling the model directly."""
+    global _cassette
+    _cassette = None
+
+
+def _call_key(config: "ModelConfig", messages: list[dict[str, str]], schema: dict[str, Any]) -> str:
+    request = {"model": config.model, "messages": messages, "format": schema, "logprobs": config.logprobs,
+               "num_ctx": config.num_ctx, "temperature": settings.llm_temperature, "timeout_s": config.timeout_s}
+    return hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
+
+
 async def chat_json(system: str, user: str, schema: dict[str, Any], follow_up: list[dict[str, str]] | None = None,
                     config: ModelConfig | None = None) -> ModelReply:
     """One constrained chat call (the enrichment model unless `config` says otherwise). `follow_up` continues the
     conversation after `user`, e.g. the model's rejected reply and the reason it was rejected."""
     config = config or enrich_model()
-    client = ollama.AsyncClient(host=settings.ollama_host)
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}, *(follow_up or [])]
+    if _cassette is None:
+        return await _call(config, messages, schema)
+    key = _call_key(config, messages, schema)
+    entry = _cassette.entries.get(key)
+    if entry is None and _cassette.mode == "replay":
+        raise LookupError(f"no recorded reply for this prompt in {_cassette.path}; run the eval with LIVE=1")
+    if entry is None:
+        started = time.perf_counter()
+        try:
+            entry = {"reply": asdict(await _call(config, messages, schema))}
+        except ModelError as exc:
+            entry = {"error": {"code": exc.code, "message": str(exc), "content": exc.content}}
+        entry |= {"key": key, "model": config.model, "wall_ms": round((time.perf_counter() - started) * 1000)}
+        _cassette.entries[key] = entry
+    _cassette.calls.append((key, entry["wall_ms"]))
+    if "error" in entry:
+        raise ModelError(entry["error"]["code"], entry["error"]["message"], entry["error"]["content"])
+    reply = entry["reply"]
+    return ModelReply(**reply | {"tokens": [tuple(t) for t in reply["tokens"]]})
+
+
+async def _call(config: ModelConfig, messages: list[dict[str, str]], schema: dict[str, Any]) -> ModelReply:
+    client = ollama.AsyncClient(host=settings.ollama_host)
     try:
         async with asyncio.timeout(config.timeout_s):
             response = await client.chat(

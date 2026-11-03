@@ -268,8 +268,8 @@ async def search_products(session: AsyncSession, os: AsyncOpenSearch, q: str, fi
 
 
 async def search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filters: search.Filters, page_size: int,
-                      after: str | None, debug: bool = False,
-                      parse: bool = True) -> tuple[schemas.SearchResponse, list[str]]:
+                      after: str | None, debug: bool = False, parse: bool = True, index: str = search.ALIAS,
+                      pipeline: str = search.PIPELINE) -> tuple[schemas.SearchResponse, list[str]]:
     """One search page and the cursor after each of its items (GraphQL puts one on every edge). With `parse`, the
     query text is read for filters first (query.understand). Page 1's parse travels in the cursor, so later pages
     search exactly the same way even if the model would now answer differently, or the cache has expired."""
@@ -282,13 +282,13 @@ async def search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filter
 
     try:
         page = await search.search(os, keywords, effective, page_size, after, debug, scope=scope,
-                                   carry=parsed.model_dump() if parsed else None)
+                                   carry=parsed.model_dump() if parsed else None, index=index, pipeline=pipeline)
         if parsed and not after and page.total == 0 and _parsed_price_applied(parsed, filters):
             # A parsed price range that matches nothing would be a dead end: drop it and say so.
             parsed = parsed.model_copy(update={"price_relaxed": True})
             keywords, effective = apply_parse(parsed, q, filters)
             page = await search.search(os, keywords, effective, page_size, None, debug, scope=scope,
-                                       carry=parsed.model_dump())
+                                       carry=parsed.model_dump(), index=index, pipeline=pipeline)
     except cursor.InvalidCursor as exc:
         raise ApiProblem(400, ProblemCode.INVALID_CURSOR, "Invalid cursor", str(exc)) from exc
     except search.CursorExpired as exc:

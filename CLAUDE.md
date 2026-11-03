@@ -38,7 +38,12 @@ uv run python scripts/query_demo.py [--fresh]  # 10 natural-language queries: pa
 make web                                     # the storefront on :3020 (Next.js; needs the API on :8020)
 make web-test                                # Jest + typecheck for apps/web
 make smoke                                   # 5 searches + deep paging + GraphQL, via the generated client
-make test                                    # unit tests, offline
+make eval                                    # evals on the dev split, replaying recorded model replies (no Ollama)
+make eval LIVE=1                             # the same against Ollama, re-recording (~45 min); BASELINE=1 compares
+make eval-test                               # the test split; run it only to report, never to tune
+make eval-latency                            # 1,000 searches on the catalog by parse path (live, ~45 min)
+make golden                                  # rebuild evals/golden/products.jsonl (hard cases are hand-written)
+make test                                    # unit tests, offline (and the eval metric tests)
 make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)
 make test-int                                # service tests on Postgres, OpenSearch and Floci containers (~3 min)
 make codegen                                 # after changing contracts, GraphQL types or messages.py (also apps/web's types)
@@ -107,6 +112,10 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - apps/web look (ADR 0017): colours only as the tokens on `:root` (light and dark); no hue in the chrome, so the
   products' own colours are the only colour on screen. Product pictures go through `ProductArt` (drawn, never a fake
   photo). One typeface, Geist, via `next/font`.
+- Evals (ADR 0018): golden data in `evals/golden/` changes only with a reason in the commit, never to make a
+  number pass. Metrics live in `evals/metrics.py`, relevance in `evals/grading.py`, both unit-tested. A prompt,
+  model or ranking change is followed by `make eval LIVE=1` and a committed recording; old recordings and results
+  are archived under `evals/archive/`, never deleted.
 - Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;

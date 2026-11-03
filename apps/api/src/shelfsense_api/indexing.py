@@ -65,14 +65,18 @@ async def product_docs(session: AsyncSession, product_ids: list[uuid.UUID]) -> d
     texts = [product_text(p.title, p.brand, p.description) for p, *_ in rows]
     # fastembed runs on the CPU and blocks; keep it off the event loop.
     vectors = await asyncio.to_thread(embed_passages, texts) if texts else []
+    return {str(p.id): product_doc(p, supplier, node_id, path, extracted.get(p.id, {}), v)
+            for (p, supplier, node_id, path), v in zip(rows, vectors, strict=True)}
+
+
+def product_doc(p: Product, supplier: str, node_id: int | None, path: str | None, extracted: dict[str, str],
+                vector: list[float]) -> dict[str, Any]:
+    """One product's search document (the evals build their golden index with it too)."""
     return {
-        str(p.id): {
-            "product_id": str(p.id), "supplier": supplier, "supplier_sku": p.supplier_sku, "title": p.title,
-            "description": p.description, "brand": p.brand, "gtin": p.gtin, "price_minor": p.price_minor,
-            "currency": p.currency, **_facets(p, extracted.get(p.id, {})),
-            "category_id": node_id, "category_path": path, "updated_at": p.updated_at.isoformat(), "embedding": v,
-        }
-        for (p, supplier, node_id, path), v in zip(rows, vectors, strict=True)
+        "product_id": str(p.id), "supplier": supplier, "supplier_sku": p.supplier_sku, "title": p.title,
+        "description": p.description, "brand": p.brand, "gtin": p.gtin, "price_minor": p.price_minor,
+        "currency": p.currency, **_facets(p, extracted),
+        "category_id": node_id, "category_path": path, "updated_at": p.updated_at.isoformat(), "embedding": vector,
     }
 
 

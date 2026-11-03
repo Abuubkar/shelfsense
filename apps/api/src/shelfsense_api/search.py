@@ -89,18 +89,24 @@ def client() -> AsyncOpenSearch:
     return _client
 
 
-async def ensure_index(os: AsyncOpenSearch) -> None:
-    """The search pipeline, the index template, and the first index (which joins the alias from the template)."""
-    await os.search_pipeline.put(id=PIPELINE, body={
-        "description": "min-max normalize BM25 and k-NN scores, then a weighted arithmetic mean",
+def pipeline_body(normalization: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The hybrid search pipeline: BM25 and k-NN scores normalized (min-max unless `normalization` says otherwise;
+    the evals compare others), then a weighted arithmetic mean."""
+    return {
+        "description": "normalize BM25 and k-NN scores, then a weighted arithmetic mean",
         "phase_results_processors": [{"normalization-processor": {
-            "normalization": {"technique": "min_max"},
+            "normalization": normalization or {"technique": "min_max"},
             "combination": {"technique": "arithmetic_mean",
                             "parameters": {"weights": list(settings.hybrid_weights)}},
         }}],
         # Only acts when a search asks for explain=true (the debug block).
         "response_processors": [{"hybrid_score_explanation": {}}],
-    })
+    }
+
+
+async def ensure_index(os: AsyncOpenSearch) -> None:
+    """The search pipeline, the index template, and the first index (which joins the alias from the template)."""
+    await os.search_pipeline.put(id=PIPELINE, body=pipeline_body())
     await os.indices.put_index_template(name=INDEX, body=INDEX_TEMPLATE)
     if not await os.indices.exists(index=INDEX):
         await os.indices.create(index=INDEX)
@@ -146,7 +152,7 @@ def filter_clauses(filters: Filters) -> list[dict[str, Any]]:
     return clauses
 
 
-def _lexical(q: str) -> dict[str, Any]:
+def lexical_query(q: str) -> dict[str, Any]:
     # cross_fields treats title, brand and category as one field, so "merrell hiking boot" can match brand and
     # title together; up to 2 terms must all match, longer queries 75% of them.
     return {"multi_match": {"query": q, "type": "cross_fields", "operator": "or", "minimum_should_match": "2<75%",
@@ -154,7 +160,7 @@ def _lexical(q: str) -> dict[str, Any]:
                             "_name": "lexical"}}
 
 
-def _semantic(vector: list[float], filters: Filters | None = None) -> dict[str, Any]:
+def semantic_query(vector: list[float], filters: Filters | None = None) -> dict[str, Any]:
     # Radial search (min_score instead of k): every product above the threshold, so it defines a set to page
     # through instead of a fixed top-k. Filters go inside the k-NN query: filtering only afterwards loses products,
     # because the approximate search over the whole index stops early (docs/challenges.md, slice 5b).
@@ -168,7 +174,7 @@ def match_set(q: str, vector: list[float] | None, filters: Filters, exclude: lis
     """The query's whole result set as one bool query (no ranking subtleties: used for facets and the tail)."""
     bool_query: dict[str, Any] = {"filter": filter_clauses(filters)}
     if q and vector is not None:
-        bool_query |= {"should": [_lexical(q), _semantic(vector, filters)], "minimum_should_match": 1}
+        bool_query |= {"should": [lexical_query(q), semantic_query(vector, filters)], "minimum_should_match": 1}
     if exclude:
         bool_query["must_not"] = [{"ids": {"values": list(exclude)}}]
     return {"bool": bool_query}
@@ -203,13 +209,14 @@ class SearchPage:
 
 async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, after: str | None,
                  debug: bool = False, scope: dict[str, Any] | None = None,
-                 carry: dict[str, Any] | None = None) -> SearchPage:
+                 carry: dict[str, Any] | None = None, index: str = ALIAS, pipeline: str = PIPELINE) -> SearchPage:
     """One page of a query's result set. A cursor holds the PIT, the rank reached, and the tail's search_after
     position. The head isn't stored in it: each page re-runs the hybrid query on the same PIT, which returns the
     same head, so cursors stay small enough to put one on every GraphQL edge.
 
     `scope` is what a cursor is bound to (by default the query and filters); `carry` rides along in every cursor
-    for the caller, e.g. the query parse page 1 used, so later pages search exactly the same way."""
+    for the caller, e.g. the query parse page 1 used, so later pages search exactly the same way. `index` and
+    `pipeline` are for the evals, which search their own golden index with other score normalizations."""
     q = " ".join(q.split())
     scope = scope or {"q": q, "filters": asdict(filters)}
     timings: dict[str, int] = {}
@@ -221,11 +228,11 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
 
     try:
         pit = position.get("pit") or (await os.create_pit(
-            index=ALIAS, params={"keep_alive": settings.search_cursor_ttl}))["pit_id"]
+            index=index, params={"keep_alive": settings.search_cursor_ttl}))["pit_id"]
         facets_task = asyncio.create_task(_facets(os, pit, q, vector, filters))
         rank = position["rank"]
         # Reranking only matters for pages that show head products; later pages need just the head's IDs.
-        head = await _head(os, pit, q, vector, filters, rank < HEAD_SIZE, debug, timings) if q else []
+        head = await _head(os, pit, q, vector, filters, rank < HEAD_SIZE, debug, timings, pipeline) if q else []
         items = head[rank : rank + page_size]
 
         more = rank + len(items) < len(head)
@@ -256,13 +263,13 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
 
 
 async def _head(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | None, filters: Filters,
-                reranked: bool, debug: bool, timings: dict[str, int]) -> list[Hit]:
+                reranked: bool, debug: bool, timings: dict[str, int], pipeline: str = PIPELINE) -> list[Hit]:
     """The first HEAD_SIZE products by hybrid score, reranked by the cross-encoder when `reranked`."""
-    hybrid: dict[str, Any] = {"queries": [_lexical(q), _semantic(vector or [])]}
+    hybrid: dict[str, Any] = {"queries": [lexical_query(q), semantic_query(vector or [])]}
     if clauses := filter_clauses(filters):
         hybrid["filter"] = {"bool": {"filter": clauses}}
     explain = debug and reranked
-    params = {"search_pipeline": PIPELINE} | ({"explain": "true"} if explain else {})
+    params = {"search_pipeline": pipeline} | ({"explain": "true"} if explain else {})
     started = time.perf_counter()
     response = await os.search(body={"size": HEAD_SIZE, "_source": _SOURCE if reranked else False,
                                      "query": {"hybrid": hybrid},

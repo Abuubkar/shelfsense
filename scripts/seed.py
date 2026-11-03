@@ -46,6 +46,9 @@ class Kind:
     genders: bool
     length_cm: tuple[int, int] | None  # a dimension worth stating, in whole cm
     price: tuple[int, int]  # USD, whole dollars
+    # For kinds a colour or these adjectives would be nonsense on (coffee, software); the evals' golden set has them.
+    colors: bool = True
+    adjectives: tuple[str, ...] = ()  # empty: ADJECTIVES
 
 
 KINDS = [
@@ -135,17 +138,18 @@ def make_truth(rng: random.Random, kind: Kind) -> dict[str, Any]:
     elif kind.size == "alpha":
         size = ("alpha", rng.choice(("XS", "S", "M", "L", "XL", "XXL")))
     length_cm = rng.randint(*kind.length_cm) if kind.length_cm else None
-    return {"kind": kind.noun, "color_base": rng.choice(COLORS), "material": rng.choice(kind.materials),
+    return {"kind": kind.noun, "color_base": rng.choice(COLORS) if kind.colors else None,
+            "material": rng.choice(kind.materials) if kind.materials else None,
             "gender": gender, "size_system": size[0] if size else None, "size_value": size[1] if size else None,
             "length_mm": length_cm * 10 if length_cm else None, "brand": rng.choice(BRANDS),
-            "adjective": rng.choice(ADJECTIVES), "price_minor": rng.randint(kind.price[0] * 100, kind.price[1] * 100 - 1)}
+            "adjective": rng.choice(kind.adjectives or ADJECTIVES), "price_minor": rng.randint(kind.price[0] * 100, kind.price[1] * 100 - 1)}
 
 
 def render(rng: random.Random, q: Quirks, kind: Kind, t: dict[str, Any], sku: str) -> dict[str, str]:
     """One feed row as this supplier would write the item."""
     color = {"full": t["color_base"], "abbrev": ABBREVIATIONS[t["color_base"]],
-             "upper": t["color_base"].upper()}[q.color_style]
-    if q.color_style == "abbrev" and rng.random() < 0.3:
+             "upper": t["color_base"].upper()}[q.color_style] if t["color_base"] else ""
+    if color and q.color_style == "abbrev" and rng.random() < 0.3:
         color = f"{color}/{ABBREVIATIONS[rng.choice(COLORS[:4])]}"  # a two-tone "blk/gry": the first colour is base
     gender = None
     if t["gender"]:
@@ -168,16 +172,20 @@ def render(rng: random.Random, q: Quirks, kind: Kind, t: dict[str, Any], sku: st
     words = {"brand": t["brand"], "adj": t["adjective"], "noun": kind.noun, "color": color,
              "gender_word": gender or "", "size": size or "", "ADJ": t["adjective"].upper(),
              "NOUN": kind.noun.upper()}
-    title = " ".join(_typo(rng, w, q.typo_rate) for w in q.template.format(**words).split())
+    # A kind without a colour leaves "()" or a trailing "-" from the template's colour slot.
+    template = q.template.format(**words).replace(" ()", "").removesuffix(" -")
+    title = " ".join(_typo(rng, w, q.typo_rate) for w in template.split())
+    made_of = f" in {t['material']}" if t["material"] else ""
     description = " ".join(filter(None, [
-        rng.choice(FLUFF), f"{t['adjective']} {kind.noun.lower()} in {t['material']}.",
-        f"Measures {length}." if length else None, f"Colour: {color}." if rng.random() < 0.5 else None,
+        rng.choice(FLUFF), f"{t['adjective']} {kind.noun.lower()}{made_of}.",
+        f"Measures {length}." if length else None,
+        (f"Colour: {color}." if rng.random() < 0.5 else None) if color else None,
     ]))
     dollars = f"{t['price_minor'] // 100}.{t['price_minor'] % 100:02d}"
     row = {"sku": sku, "title": title, "description": description, "brand": t["brand"], "gtin": "",
            "price": f"${dollars}" if q.price_style == "dollar" else dollars, "currency": "USD"}
     color_col, material_col, gender_col, size_col = q.columns
-    row |= {color_col: color, material_col: t["material"], gender_col: gender or "", size_col: size or "",
+    row |= {color_col: color, material_col: t["material"] or "", gender_col: gender or "", size_col: size or "",
             "length": length or ""}
     return row
 
