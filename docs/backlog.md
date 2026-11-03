@@ -66,6 +66,21 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   with a live result count is the better phone design.
 - **GraphQL `Money.amountMinor` is a 32-bit Int** (slice 5b). Amounts above $21,474,836.47 overflow GraphQL's Int.
   Switch to a string or a custom scalar before high-value catalogs.
-- **Min-max normalization and BM25 ties** (slice 5b). When many lexical hits tie at the pool's minimum, min-max gives
-  them all 0 and the hybrid ignores keyword for them. Try the `l2` or z-score normalization technique (or RRF) and
-  compare with the search eval before changing the pipeline.
+- **Min-max normalization and BM25 ties** (slice 5b; measured in 6a). When many lexical hits tie at the pool's
+  minimum, min-max gives them all 0 and the hybrid ignores keyword for them. On the golden set, without the
+  reranker, a BM25 floor of 0 (`lower_bounds`) scored nDCG@10 0.876 against min-max's 0.866 (RRF 0.875, l2 0.873,
+  z-score 0.854), but with the reranker every variant scored 0.871: 400 products are too few for the head of 50 to
+  be selective. Deciding needs judgements on the catalog itself (head recall at 8k+ products), not this corpus.
+- **Query model misses materials** (slice 6a). qwen2.5:3b left out 15 of 19 materials ("wood bookcase", "canvas
+  backpack"), read "stainless steel water bottle" as an exclusion and "no leather" as an inclusion, and turned
+  "red wing boots" and "pink floyd vinyl" into colour filters. The prompt's examples show only wool and cotton;
+  try material and brand examples (prompt `query/2`), and the 7B model in the 6b sweep.
+- **Filters that match nothing dead-end the search** (slice 6a). Only a parsed price is dropped when it zeroes the
+  results (`price_relaxed`); a wrong colour or size from the parse returns nothing (3 of 80 dev queries). Relax
+  parsed filters one by one before returning an empty page.
+- **Candidate recall 0.90 on the golden set** (slice 6a). The embedding pre-filter misses the right leaf for 1 in
+  10 products, and the model can't pick what it isn't offered; non-English listings (leaf accuracy 0.31),
+  multi-use items (0.56) and bundles (0.70) suffer most. Try more candidates (25) or a multilingual embedding
+  model, and measure.
+- **`wooden` doesn't wake the query model** (slice 6a). The fast path's material words are the normalized
+  vocabulary, so "wooden prayer beads" skips the model and loses its material.

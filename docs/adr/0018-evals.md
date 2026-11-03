@@ -24,7 +24,9 @@ and `evals/REPORT.md`.
   for the category alone or a sibling under a parent below the top level.
 - **Splits**: a fixed hash split. 280/120 products and 80/40 queries. `make eval-test` runs the test split.
 - **Search is measured apart from classification.** It runs on its own index (`evals-golden-v1`) of all 400
-  golden products, with gold categories and the documents built by `indexing.product_doc`. The configurations are
+  golden products, with gold categories and gold attributes standing in for the extracted ones (facets use the
+  supplier's column first, as in production), and the documents built by `indexing.product_doc`. The
+  configurations are
   BM25 only, vector only, hybrid, hybrid + rerank under each score normalization, and the shipped path: the API's
   `service.search_page` with query parsing.
 - **Offline replay.** `llm.chat_json` records each reply by a hash of the whole request (model, messages, schema,

@@ -1,0 +1,777 @@
+{
+  "split": "test",
+  "mode": "live",
+  "finished": "2026-11-03 10:10 UTC",
+  "models": {
+    "enrich": "qwen2.5:7b-instruct",
+    "query": "qwen2.5:3b-instruct"
+  },
+  "prompts": {
+    "enrich": "enrich/2",
+    "query": "query/1"
+  },
+  "taxonomy": "2021-09-21",
+  "metrics": {
+    "enrichment": {
+      "products": 120,
+      "candidate_recall": 0.9333,
+      "leaf_accuracy": 0.8583,
+      "hierarchical_f1": 0.9109,
+      "attributes": {
+        "color": {
+          "precision": 1.0,
+          "recall": 0.9398,
+          "f1": 0.9689,
+          "tp": 78,
+          "fp": 0,
+          "fn": 5
+        },
+        "material": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1": 0.9333,
+          "tp": 70,
+          "fp": 0,
+          "fn": 10
+        },
+        "gender": {
+          "precision": 0.8,
+          "recall": 0.5714,
+          "f1": 0.6667,
+          "tp": 4,
+          "fp": 1,
+          "fn": 3
+        },
+        "size": {
+          "precision": 1.0,
+          "recall": 0.9231,
+          "f1": 0.96,
+          "tp": 12,
+          "fp": 0,
+          "fn": 1
+        },
+        "length": {
+          "precision": 1.0,
+          "recall": 0.8947,
+          "f1": 0.9444,
+          "tp": 17,
+          "fp": 0,
+          "fn": 2
+        }
+      },
+      "attribute_macro_f1": 0.8947,
+      "ungrounded_rate": 0.0406,
+      "unnormalized_rate": 0.0355,
+      "none_rate": 0.0083,
+      "error_rate": 0.0,
+      "schema_validity": 1.0,
+      "seconds_per_product": 4.84,
+      "products_per_hour": 743,
+      "tokens_per_second": 24.7,
+      "leaf_accuracy_by_type": {
+        "absent": 0.8333,
+        "accessory": 0.6667,
+        "bundle": 0.4,
+        "conflict": 1.0,
+        "multi_use": 0.6667,
+        "non_english": 0.5,
+        "rendered": 0.9091
+      },
+      "confusion_depth2": [
+        [
+          "Health & Beauty > Personal Care",
+          "Health & Beauty > Personal Care",
+          8
+        ],
+        [
+          "Sporting Goods > Outdoor Recreation",
+          "Sporting Goods > Outdoor Recreation",
+          7
+        ],
+        [
+          "Animals & Pet Supplies > Pet Supplies",
+          "Animals & Pet Supplies > Pet Supplies",
+          6
+        ],
+        [
+          "Cameras & Optics > Optics",
+          "Cameras & Optics > Optics",
+          6
+        ],
+        [
+          "Toys & Games > Toys",
+          "Toys & Games > Toys",
+          5
+        ],
+        [
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          5
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Apparel & Accessories > Clothing",
+          4
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          4
+        ],
+        [
+          "Business & Industrial > Work Safety Protective Gear",
+          "Business & Industrial > Work Safety Protective Gear",
+          4
+        ],
+        [
+          "Electronics > Audio",
+          "Electronics > Audio",
+          4
+        ],
+        [
+          "Hardware > Tools",
+          "Hardware > Tools",
+          4
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Home & Garden > Kitchen & Dining",
+          4
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Apparel & Accessories > Shoes",
+          3
+        ],
+        [
+          "Baby & Toddler > Baby Transport",
+          "Baby & Toddler > Baby Transport",
+          3
+        ],
+        [
+          "Cameras & Optics > Camera & Optic Accessories",
+          "Cameras & Optics > Camera & Optic Accessories",
+          3
+        ],
+        [
+          "Electronics > Communications",
+          "Electronics > Communications",
+          3
+        ],
+        [
+          "Electronics > Electronics Accessories",
+          "Electronics > Electronics Accessories",
+          3
+        ],
+        [
+          "Media > Music & Sound Recordings",
+          "Media > Music & Sound Recordings",
+          3
+        ],
+        [
+          "Office Supplies > General Office Supplies",
+          "Office Supplies > General Office Supplies",
+          3
+        ],
+        [
+          "Office Supplies > Office Instruments",
+          "Office Supplies > Office Instruments",
+          3
+        ],
+        [
+          "Baby & Toddler > Nursing & Feeding",
+          "Baby & Toddler > Nursing & Feeding",
+          2
+        ],
+        [
+          "Food, Beverages & Tobacco > Beverages",
+          "Food, Beverages & Tobacco > Beverages",
+          2
+        ],
+        [
+          "Luggage & Bags > Suitcases",
+          "Luggage & Bags > Suitcases",
+          2
+        ],
+        [
+          "Religious & Ceremonial > Memorial Ceremony Supplies",
+          "Religious & Ceremonial > Memorial Ceremony Supplies",
+          2
+        ],
+        [
+          "Religious & Ceremonial > Religious Items",
+          "Religious & Ceremonial > Religious Items",
+          2
+        ],
+        [
+          "Toys & Games > Puzzles",
+          "Toys & Games > Puzzles",
+          2
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Hardware > Building Consumables",
+          1
+        ],
+        [
+          "Electronics > Communications",
+          "Apparel & Accessories > Handbags, Wallets & Cases",
+          1
+        ],
+        [
+          "Electronics > Electronics Accessories",
+          "Electronics > Communications",
+          1
+        ],
+        [
+          "Food, Beverages & Tobacco > Food Items",
+          "Food, Beverages & Tobacco > Food Items",
+          1
+        ],
+        [
+          "Furniture > Futons",
+          "Furniture > Futons",
+          1
+        ],
+        [
+          "Furniture > Office Furniture",
+          "Furniture > Office Furniture",
+          1
+        ],
+        [
+          "Furniture > Shelving",
+          "Furniture > Shelving",
+          1
+        ],
+        [
+          "Furniture > Tables",
+          "Furniture > Tables",
+          1
+        ],
+        [
+          "Hardware > Tools",
+          "Hardware > Tool Accessories",
+          1
+        ],
+        [
+          "Health & Beauty > Health Care",
+          "Health & Beauty > Health Care",
+          1
+        ],
+        [
+          "Home & Garden > Decor",
+          "Home & Garden > Decor",
+          1
+        ],
+        [
+          "Home & Garden > Household Appliance Accessories",
+          "Home & Garden > Household Appliance Accessories",
+          1
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Sporting Goods > Outdoor Recreation",
+          1
+        ],
+        [
+          "Home & Garden > Linens & Bedding",
+          "Home & Garden > Linens & Bedding",
+          1
+        ],
+        [
+          "Luggage & Bags > Luggage Accessories",
+          "Luggage & Bags > Luggage Accessories",
+          1
+        ],
+        [
+          "Media > Books",
+          "Arts & Entertainment > Party & Celebration",
+          1
+        ],
+        [
+          "Media > Books",
+          "Media > Books",
+          1
+        ],
+        [
+          "Media > Books",
+          "NONE",
+          1
+        ],
+        [
+          "Software > Computer Software",
+          "Office Supplies > General Office Supplies",
+          1
+        ],
+        [
+          "Software > Video Game Software",
+          "Electronics > Video Game Consoles",
+          1
+        ],
+        [
+          "Software > Video Game Software",
+          "Software > Video Game Software",
+          1
+        ],
+        [
+          "Sporting Goods > Exercise & Fitness",
+          "Sporting Goods > Exercise & Fitness",
+          1
+        ],
+        [
+          "Toys & Games > Games",
+          "Toys & Games > Games",
+          1
+        ]
+      ],
+      "top_confused": [
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Clothing > Outerwear > Rain Suits",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Ink Pads",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Tools > Color Mixing Tools > Palettes",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Hardware > Building Consumables > Painting Consumables > Paint",
+          1
+        ],
+        [
+          "Electronics > Communications > Telephony > Mobile Phone Accessories > Mobile Phone Cases",
+          "Apparel & Accessories > Handbags, Wallets & Cases > Wallets & Money Clips",
+          1
+        ],
+        [
+          "Electronics > Electronics Accessories > Power > Power Adapters & Chargers",
+          "Electronics > Communications > Telephony > Mobile Phone Accessories > Mobile Phone Stands",
+          1
+        ],
+        [
+          "Hardware > Tools > Drills > Handheld Power Drills",
+          "Hardware > Tool Accessories > Power Tool Batteries",
+          1
+        ],
+        [
+          "Hardware > Tools > Screwdrivers",
+          "Hardware > Tools > Tool Sets > Hand Tool Sets",
+          1
+        ],
+        [
+          "Health & Beauty > Personal Care > Hair Care > Shampoo & Conditioner > Shampoo",
+          "Health & Beauty > Personal Care > Hair Care > Shampoo & Conditioner > Shampoo & Conditioner Sets",
+          1
+        ],
+        [
+          "Home & Garden > Decor > Throw Pillows",
+          "Home & Garden > Decor > Artificial Flora",
+          1
+        ],
+        [
+          "Home & Garden > Household Appliance Accessories > Vacuum Accessories",
+          "Home & Garden > Household Appliance Accessories > Air Purifier Accessories > Air Purifier Filters",
+          1
+        ],
+        [
+          "Home & Garden > Kitchen & Dining > Cookware & Bakeware > Cookware > Skillets & Frying Pans",
+          "Home & Garden > Kitchen & Dining > Cookware & Bakeware > Cookware > Cookware Sets",
+          1
+        ],
+        [
+          "Home & Garden > Kitchen & Dining > Food & Beverage Carriers > Water Bottles",
+          "Sporting Goods > Outdoor Recreation > Hydration System Accessories",
+          1
+        ],
+        [
+          "Media > Books > Print Books",
+          "Arts & Entertainment > Party & Celebration > Gift Giving > Greeting & Note Cards",
+          1
+        ],
+        [
+          "Media > Books > Print Books",
+          "NONE",
+          1
+        ]
+      ]
+    },
+    "parse": {
+      "queries": 40,
+      "exact_match": 0.65,
+      "slot_f1": 0.6275,
+      "slots": {
+        "colors": {
+          "f1": 0.9091,
+          "tp": 5,
+          "fp": 1,
+          "fn": 0
+        },
+        "exclude_colors": {
+          "f1": 1.0,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0
+        },
+        "materials": {
+          "f1": 0.4,
+          "tp": 4,
+          "fp": 3,
+          "fn": 9
+        },
+        "exclude_materials": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 2,
+          "fn": 3
+        },
+        "price_min": {
+          "f1": 1.0,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0
+        },
+        "price_max": {
+          "f1": 1.0,
+          "tp": 2,
+          "fp": 0,
+          "fn": 0
+        },
+        "gender": {
+          "f1": 0.8,
+          "tp": 2,
+          "fp": 0,
+          "fn": 1
+        },
+        "size": {
+          "f1": 1.0,
+          "tp": 1,
+          "fp": 0,
+          "fn": 0
+        }
+      },
+      "keyword_f1": 0.9048,
+      "fast_path_rate": 0.35,
+      "degraded_rate": 0.0,
+      "sources": {
+        "llm": 26,
+        "rules": 14
+      },
+      "p50_ms": 1214,
+      "p95_ms": 1322,
+      "llm_p50_ms": 1230,
+      "llm_p95_ms": 1391,
+      "misses": [
+        {
+          "q": "bamboo toothbrush",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=bamboo"
+        },
+        {
+          "q": "aluminum tripod",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=aluminum"
+        },
+        {
+          "q": "nylon tent",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=nylon"
+        },
+        {
+          "q": "rubber cat toy",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=rubber"
+        },
+        {
+          "q": "glass baby bottle",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=glass"
+        },
+        {
+          "q": "unisex crew neck tee",
+          "source": "llm",
+          "got": "(none)",
+          "want": "gender=unisex"
+        },
+        {
+          "q": "leather bifold wallet",
+          "source": "llm",
+          "got": "exclude_materials=leather",
+          "want": "materials=leather"
+        },
+        {
+          "q": "black down parka",
+          "source": "llm",
+          "got": "colors=black",
+          "want": "colors=black materials=down"
+        },
+        {
+          "q": "mens nylon hiking pants",
+          "source": "llm",
+          "got": "gender=men",
+          "want": "materials=nylon gender=men"
+        },
+        {
+          "q": "stainless steel screwdriver set",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=stainless steel"
+        },
+        {
+          "q": "rain jacket without nylon",
+          "source": "llm",
+          "got": "materials=nylon",
+          "want": "exclude_materials=nylon"
+        },
+        {
+          "q": "toothbrush non plastic",
+          "source": "llm",
+          "got": "materials=plastic exclude_materials=non-plastic",
+          "want": "exclude_materials=plastic"
+        },
+        {
+          "q": "dog collar not leather",
+          "source": "llm",
+          "got": "materials=leather",
+          "want": "exclude_materials=leather"
+        },
+        {
+          "q": "black diamond shoes",
+          "source": "llm",
+          "got": "colors=black",
+          "want": "(none)"
+        }
+      ]
+    },
+    "search": {
+      "queries": 40,
+      "corpus": 400,
+      "ndcg10": 0.7609,
+      "mrr": 0.85,
+      "zero_result_rate": 0.025,
+      "ndcg10_over_bm25": 0.1446,
+      "ndcg10_by_tier": {
+        "head": 0.949,
+        "torso": 0.7804,
+        "tail": 0.5714
+      },
+      "ablation": {
+        "BM25 only": {
+          "ndcg10": 0.6163,
+          "mrr": 0.6613,
+          "zero_result_rate": 0.2,
+          "judged": 40
+        },
+        "vector only": {
+          "ndcg10": 0.8218,
+          "mrr": 0.8467,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid, min-max (shipped)": {
+          "ndcg10": 0.8135,
+          "mrr": 0.8279,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid + rerank, min-max (shipped)": {
+          "ndcg10": 0.8555,
+          "mrr": 0.8621,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid, min-max, BM25 floor 0": {
+          "ndcg10": 0.818,
+          "mrr": 0.8342,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid + rerank, min-max, BM25 floor 0": {
+          "ndcg10": 0.8555,
+          "mrr": 0.8621,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid, l2": {
+          "ndcg10": 0.8173,
+          "mrr": 0.8321,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid + rerank, l2": {
+          "ndcg10": 0.8555,
+          "mrr": 0.8621,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid, z-score": {
+          "ndcg10": 0.806,
+          "mrr": 0.8321,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid + rerank, z-score": {
+          "ndcg10": 0.8555,
+          "mrr": 0.8621,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid, RRF (rank 60)": {
+          "ndcg10": 0.8176,
+          "mrr": 0.8342,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid + rerank, RRF (rank 60)": {
+          "ndcg10": 0.8555,
+          "mrr": 0.8621,
+          "zero_result_rate": 0.0,
+          "judged": 40
+        },
+        "hybrid + rerank + parsed filters (shipped)": {
+          "ndcg10": 0.7609,
+          "mrr": 0.85,
+          "zero_result_rate": 0.025,
+          "judged": 40
+        }
+      },
+      "worst": [
+        {
+          "q": "leather bifold wallet",
+          "tier": "torso",
+          "ndcg10": 0
+        },
+        {
+          "q": "black down parka",
+          "tier": "torso",
+          "ndcg10": 0
+        },
+        {
+          "q": "toothbrush non plastic",
+          "tier": "tail",
+          "ndcg10": 0.0469
+        },
+        {
+          "q": "black diamond shoes",
+          "tier": "tail",
+          "ndcg10": 0.0975
+        },
+        {
+          "q": "rain jacket without nylon",
+          "tier": "tail",
+          "ndcg10": 0.1215
+        },
+        {
+          "q": "dog collar not leather",
+          "tier": "tail",
+          "ndcg10": 0.1788
+        },
+        {
+          "q": "binoculers",
+          "tier": "tail",
+          "ndcg10": 0.3148
+        },
+        {
+          "q": "wool hiking socks",
+          "tier": "torso",
+          "ndcg10": 0.5874
+        },
+        {
+          "q": "polyester running shorts",
+          "tier": "torso",
+          "ndcg10": 0.6639
+        },
+        {
+          "q": "rain jacket",
+          "tier": "head",
+          "ndcg10": 0.7041
+        }
+      ]
+    }
+  },
+  "gates": [
+    {
+      "metric": "enrichment.leaf_accuracy",
+      "value": 0.8583,
+      "gate": ">= 0.8",
+      "passed": true
+    },
+    {
+      "metric": "enrichment.hierarchical_f1",
+      "value": 0.9109,
+      "gate": ">= 0.9",
+      "passed": true
+    },
+    {
+      "metric": "enrichment.candidate_recall",
+      "value": 0.9333,
+      "gate": ">= 0.97",
+      "passed": false
+    },
+    {
+      "metric": "enrichment.attribute_macro_f1",
+      "value": 0.8947,
+      "gate": ">= 0.85",
+      "passed": true
+    },
+    {
+      "metric": "enrichment.ungrounded_rate",
+      "value": 0.0406,
+      "gate": "<= 0.05",
+      "passed": true
+    },
+    {
+      "metric": "enrichment.schema_validity",
+      "value": 1.0,
+      "gate": ">= 0.98",
+      "passed": true
+    },
+    {
+      "metric": "enrichment.products_per_hour",
+      "value": 743,
+      "gate": ">= 400",
+      "passed": true
+    },
+    {
+      "metric": "parse.exact_match",
+      "value": 0.65,
+      "gate": ">= 0.75",
+      "passed": false
+    },
+    {
+      "metric": "parse.slot_f1",
+      "value": 0.6275,
+      "gate": ">= 0.9",
+      "passed": false
+    },
+    {
+      "metric": "search.ndcg10",
+      "value": 0.7609,
+      "gate": ">= 0.72",
+      "passed": true
+    },
+    {
+      "metric": "search.ndcg10_over_bm25",
+      "value": 0.1446,
+      "gate": ">= 0.08",
+      "passed": true
+    },
+    {
+      "metric": "search.zero_result_rate",
+      "value": 0.025,
+      "gate": "<= 0.02",
+      "passed": false
+    }
+  ]
+}

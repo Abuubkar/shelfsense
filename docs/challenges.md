@@ -287,3 +287,50 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
   alone. The ranking section also gave tied products consecutive ranks ("#6 by keyword"), an order BM25 never gave.
 - **What we did.** Tied scores now share a rank (1, 2, 2, 4) with "tied with N" beside it, and the footnote says the
   lowest result scores 0. The normalization itself is unchanged; noted in the backlog.
+
+## Slice 6a
+
+### The seed catalog covers 6 of 21 taxonomy branches
+
+- **Problem.** The plan asked for golden products stratified over 25 top-level branches. The 2021-09-21 taxonomy
+  has 21, and the seed generator's 18 kinds sit in only 6 of them, so a classifier eval built on the seeds alone
+  would test 18 categories over and over.
+- **What we did.** The golden builder adds 42 kinds over the other branches (all but Mature) and renders them with
+  the seeds' own supplier quirks. Kinds such as coffee or software needed no colour, no material and their own
+  adjectives, so `seed.Kind` gained three optional fields. The first 20,000 seed rows still render byte for byte
+  as before (checked against `ground_truth.parquet`).
+
+### The golden index searched without extracted attributes
+
+- **Problem.** In production a facet comes from the supplier's column, or else from the attribute enrichment
+  extracted (`indexing._facets`). The golden index passed no extracted attributes, so a colour or gender filter
+  found nothing for the hard cases that have no columns. "pink phone case", "black headphones under $150" and
+  "kids backpack" returned zero results, which read as a search failure.
+- **What we did.** The golden index takes the gold attributes as its extracted ones, as it already took gold
+  categories (search measured as if enrichment were perfect). Shipped-path nDCG@10 went from 0.791 to 0.815 and
+  zero results from 8.8% to 3.8%. The first numbers are kept in `evals/archive/results/`.
+
+### The reranker hides the normalization choice on a small corpus
+
+- **Problem.** The BM25-ties experiment (slice 5b) needed the search eval. With 400 products, most queries match
+  fewer than 50, so the head of 50 is the whole match set, and the cross-encoder reorders the same products
+  whatever normalization chose them. Every variant scored nDCG@10 0.871 after reranking.
+- **What we did.** Reported the variants with and without the reranker. Without it, a BM25 floor of 0 beat min-max
+  by a point (0.876 vs 0.866). The pipeline is unchanged, and the decision waits for judgements on the catalog
+  (docs/backlog.md).
+
+### A CPU reranker can't meet a 150 ms search
+
+- **Problem.** The plan's p95 gates (150 ms fast path, 180 ms cache hit) assume a fast reranker. On this Mac
+  (M1 Pro, CPU) reranking the head of 50 took 0.8–2.0 s per search; embedding plus hybrid retrieval took
+  10–170 ms.
+- **What we did.** Measured it before the 1,000-search latency run and raised it rather than running into the
+  miss. Options: a smaller head, a smaller cross-encoder, a GPU, or a separate gate for reranked searches.
+
+### Replays match the live run exactly
+
+- **Problem.** A replayed eval is only worth having if it reproduces the live numbers, latencies included, and the
+  search side rebuilds its index every run (HNSW graphs can differ between builds).
+- **What we did.** Model replies are recorded with their wall time and keyed by a hash of the whole request.
+  The metrics read model time from the recording. The dev replay matched the live run in every enrichment, parse
+  and search metric; OpenSearch returned the same rankings from a fresh index.
