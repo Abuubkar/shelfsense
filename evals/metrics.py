@@ -8,6 +8,8 @@ definition the gates use (gains, ties, what an empty answer counts as).
   it), summed over all products before dividing (micro). A wrong leaf in the right branch still scores the shared
   ancestors; NONE predicts the empty set.
 - Slot F1: precision and recall over the filter values a parse set, summed over queries.
+- McNemar's exact test: whether two models that disagree on some items differ by more than chance, from the
+  items only one of them gets right (two-sided binomial at p = 0.5).
 """
 
 import math
@@ -121,3 +123,12 @@ def percentile(values: list[float], pct: float) -> float:
         return 0.0
     ordered = sorted(values)
     return ordered[max(0, math.ceil(pct / 100 * len(ordered)) - 1)]
+
+
+def mcnemar_p(only_a: int, only_b: int) -> float:
+    """Two-sided exact McNemar p-value from the discordant counts (items only A got right, only B got right)."""
+    n = only_a + only_b
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(min(only_a, only_b) + 1)) / 2**n
+    return min(1.0, 2 * tail)

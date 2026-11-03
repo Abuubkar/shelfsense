@@ -42,6 +42,7 @@ make eval                                    # evals on the dev split, replaying
 make eval LIVE=1                             # the same against Ollama, re-recording (~45 min); BASELINE=1 compares
 make eval-test                               # the test split; run it only to report, never to tune
 make eval-latency                            # 1,000 searches on the catalog by parse path (live, ~45 min)
+make sweep                                   # enrichment and query models compared on dev (evals/SWEEP.md); LIVE=1 ~80 min
 make golden                                  # rebuild evals/golden/products.jsonl (hard cases are hand-written)
 make test                                    # unit tests, offline (and the eval metric tests)
 make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)

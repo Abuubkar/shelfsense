@@ -1,5 +1,5 @@
 import pytest
-from metrics import Counts, hierarchical_f1, ndcg, percentile, reciprocal_rank, score_parse
+from metrics import Counts, hierarchical_f1, mcnemar_p, ndcg, percentile, reciprocal_rank, score_parse
 
 
 def test_ndcg_divides_by_the_ideal_order_of_every_graded_product() -> None:
@@ -39,3 +39,10 @@ def test_slot_f1_counts_each_filter_value_and_exact_match_needs_every_slot() -> 
 def test_percentile_is_nearest_rank() -> None:
     assert percentile([5, 1, 3, 2, 4], 50) == 3
     assert percentile(list(range(1, 21)), 95) == 19
+
+
+def test_mcnemar_p_is_the_two_sided_binomial_tail_of_the_discordant_items() -> None:
+    # 1 vs 9 discordant: P(X <= 1 | n=10, 0.5) = 11/1024, doubled.
+    assert mcnemar_p(1, 9) == pytest.approx(22 / 1024)
+    assert mcnemar_p(5, 5) == 1.0
+    assert mcnemar_p(0, 0) == 1.0

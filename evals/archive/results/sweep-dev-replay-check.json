@@ -1,0 +1,1743 @@
+{
+  "split": "dev",
+  "modes": {
+    "enrich": "replay",
+    "parse": "replay"
+  },
+  "finished": "2026-11-03 19:50 UTC",
+  "prompts": {
+    "enrich": "enrich/2",
+    "query": "query/1"
+  },
+  "taxonomy": "2021-09-21",
+  "query_timeout_s": 2.5,
+  "defaults": {
+    "enrich": "qwen2.5:7b-instruct",
+    "query": "qwen2.5:3b-instruct"
+  },
+  "skipped": {
+    "qwen2.5:14b-instruct": "not run: its 4-bit weights are ~9 GB, and on this 16 GB Mac ~7 GB is free with the stack's containers up (Metal's working-set limit is ~10.7 GB), so it would swap and its throughput would measure the swap"
+  },
+  "enrichment": {
+    "qwen2.5:7b-instruct": {
+      "products": 280,
+      "candidate_recall": 0.9,
+      "leaf_accuracy": 0.8357,
+      "hierarchical_f1": 0.886,
+      "attributes": {
+        "color": {
+          "precision": 0.9759,
+          "recall": 0.8482,
+          "f1": 0.9076,
+          "tp": 162,
+          "fp": 4,
+          "fn": 29
+        },
+        "material": {
+          "precision": 0.9882,
+          "recall": 0.8984,
+          "f1": 0.9412,
+          "tp": 168,
+          "fp": 2,
+          "fn": 19
+        },
+        "gender": {
+          "precision": 1.0,
+          "recall": 0.5556,
+          "f1": 0.7143,
+          "tp": 10,
+          "fp": 0,
+          "fn": 8
+        },
+        "size": {
+          "precision": 1.0,
+          "recall": 0.9355,
+          "f1": 0.9667,
+          "tp": 29,
+          "fp": 0,
+          "fn": 2
+        },
+        "length": {
+          "precision": 1.0,
+          "recall": 0.8814,
+          "f1": 0.9369,
+          "tp": 52,
+          "fp": 0,
+          "fn": 7
+        }
+      },
+      "attribute_macro_f1": 0.8933,
+      "ungrounded_rate": 0.0458,
+      "unnormalized_rate": 0.0646,
+      "none_rate": 0.0179,
+      "error_rate": 0.0036,
+      "schema_validity": 0.9964,
+      "seconds_per_product": 5.52,
+      "products_per_hour": 652,
+      "tokens_per_second": 24.1,
+      "leaf_accuracy_by_type": {
+        "absent": 1.0,
+        "accessory": 0.7143,
+        "bundle": 0.7,
+        "conflict": 0.875,
+        "multi_use": 0.5556,
+        "non_english": 0.3077,
+        "rendered": 0.8821
+      },
+      "wrong_leaf": [
+        "g-019",
+        "g-029",
+        "g-030",
+        "g-031",
+        "g-037",
+        "g-038",
+        "g-043",
+        "g-065",
+        "g-097",
+        "g-100",
+        "g-105",
+        "g-140",
+        "g-146",
+        "g-159",
+        "g-169",
+        "g-172",
+        "g-176",
+        "g-184",
+        "g-190",
+        "g-193",
+        "g-243",
+        "g-249",
+        "g-252",
+        "g-255",
+        "g-285",
+        "h-009",
+        "h-014",
+        "h-019",
+        "h-020",
+        "h-028",
+        "h-032",
+        "h-035",
+        "h-041",
+        "h-044",
+        "h-046",
+        "h-048",
+        "h-061",
+        "h-086",
+        "h-087",
+        "h-088",
+        "h-089",
+        "h-090",
+        "h-093",
+        "h-095",
+        "h-096",
+        "h-100"
+      ],
+      "confusion_depth2": [
+        [
+          "Hardware > Tools",
+          "Hardware > Tools",
+          13
+        ],
+        [
+          "Health & Beauty > Personal Care",
+          "Health & Beauty > Personal Care",
+          13
+        ],
+        [
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          12
+        ],
+        [
+          "Animals & Pet Supplies > Pet Supplies",
+          "Animals & Pet Supplies > Pet Supplies",
+          11
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Home & Garden > Kitchen & Dining",
+          11
+        ],
+        [
+          "Sporting Goods > Outdoor Recreation",
+          "Sporting Goods > Outdoor Recreation",
+          11
+        ],
+        [
+          "Business & Industrial > Work Safety Protective Gear",
+          "Business & Industrial > Work Safety Protective Gear",
+          10
+        ],
+        [
+          "Food, Beverages & Tobacco > Beverages",
+          "Food, Beverages & Tobacco > Beverages",
+          10
+        ],
+        [
+          "Baby & Toddler > Nursing & Feeding",
+          "Baby & Toddler > Nursing & Feeding",
+          9
+        ],
+        [
+          "Religious & Ceremonial > Religious Items",
+          "Religious & Ceremonial > Religious Items",
+          9
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Apparel & Accessories > Clothing",
+          8
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          8
+        ],
+        [
+          "Media > Music & Sound Recordings",
+          "Media > Music & Sound Recordings",
+          8
+        ],
+        [
+          "Electronics > Audio",
+          "Electronics > Audio",
+          7
+        ],
+        [
+          "Office Supplies > Office Instruments",
+          "Office Supplies > Office Instruments",
+          7
+        ],
+        [
+          "Software > Computer Software",
+          "Software > Computer Software",
+          7
+        ],
+        [
+          "Toys & Games > Games",
+          "Toys & Games > Games",
+          6
+        ],
+        [
+          "Cameras & Optics > Optics",
+          "Cameras & Optics > Optics",
+          5
+        ],
+        [
+          "Electronics > Electronics Accessories",
+          "Electronics > Electronics Accessories",
+          5
+        ],
+        [
+          "Food, Beverages & Tobacco > Food Items",
+          "Food, Beverages & Tobacco > Food Items",
+          5
+        ],
+        [
+          "Furniture > Office Furniture",
+          "Furniture > Office Furniture",
+          5
+        ],
+        [
+          "Furniture > Tables",
+          "Furniture > Tables",
+          5
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Apparel & Accessories > Shoes",
+          4
+        ],
+        [
+          "Baby & Toddler > Baby Transport",
+          "Baby & Toddler > Baby Transport",
+          4
+        ],
+        [
+          "Cameras & Optics > Camera & Optic Accessories",
+          "Cameras & Optics > Camera & Optic Accessories",
+          4
+        ],
+        [
+          "Electronics > Communications",
+          "Electronics > Communications",
+          4
+        ],
+        [
+          "Furniture > Shelving",
+          "Furniture > Shelving",
+          4
+        ],
+        [
+          "Luggage & Bags > Luggage Accessories",
+          "Luggage & Bags > Luggage Accessories",
+          4
+        ],
+        [
+          "Software > Video Game Software",
+          "Software > Video Game Software",
+          4
+        ],
+        [
+          "Sporting Goods > Exercise & Fitness",
+          "Sporting Goods > Exercise & Fitness",
+          4
+        ],
+        [
+          "Toys & Games > Puzzles",
+          "Toys & Games > Puzzles",
+          4
+        ],
+        [
+          "Toys & Games > Toys",
+          "Toys & Games > Toys",
+          4
+        ],
+        [
+          "Home & Garden > Decor",
+          "Home & Garden > Decor",
+          3
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Luggage & Bags > Backpacks",
+          3
+        ],
+        [
+          "Luggage & Bags > Suitcases",
+          "Luggage & Bags > Suitcases",
+          3
+        ],
+        [
+          "Office Supplies > General Office Supplies",
+          "Office Supplies > General Office Supplies",
+          3
+        ],
+        [
+          "Religious & Ceremonial > Memorial Ceremony Supplies",
+          "Religious & Ceremonial > Memorial Ceremony Supplies",
+          3
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Exercise & Fitness",
+          2
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Hardware > Building Consumables",
+          2
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Sporting Goods > Outdoor Recreation",
+          2
+        ],
+        [
+          "Home & Garden > Linens & Bedding",
+          "Home & Garden > Linens & Bedding",
+          2
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "NONE",
+          2
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Sporting Goods > Outdoor Recreation",
+          2
+        ],
+        [
+          "Media > Books",
+          "Media > Books",
+          2
+        ],
+        [
+          "Software > Computer Software",
+          "NONE",
+          2
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Apparel & Accessories > Shoes",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "NONE",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Sporting Goods > Exercise & Fitness",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing Accessories",
+          "Apparel & Accessories > Clothing Accessories",
+          1
+        ],
+        [
+          "Apparel & Accessories > Handbag & Wallet Accessories",
+          "Apparel & Accessories > Handbag & Wallet Accessories",
+          1
+        ],
+        [
+          "Apparel & Accessories > Handbags, Wallets & Cases",
+          "Apparel & Accessories > Handbags, Wallets & Cases",
+          1
+        ],
+        [
+          "Apparel & Accessories > Jewelry",
+          "Apparel & Accessories > Jewelry",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoe Accessories",
+          "Apparel & Accessories > Shoe Accessories",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Hardware > Tools",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Home & Garden > Fireplace & Wood Stove Accessories",
+          1
+        ],
+        [
+          "Business & Industrial > Work Safety Protective Gear",
+          "Sporting Goods > Outdoor Recreation",
+          1
+        ],
+        [
+          "Cameras & Optics > Cameras",
+          "Cameras & Optics > Cameras",
+          1
+        ],
+        [
+          "Electronics > Audio",
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          1
+        ],
+        [
+          "Electronics > Communications",
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          1
+        ],
+        [
+          "Electronics > Print, Copy, Scan & Fax",
+          "Electronics > Print, Copy, Scan & Fax",
+          1
+        ],
+        [
+          "Electronics > Video Game Console Accessories",
+          "Electronics > Electronics Accessories",
+          1
+        ],
+        [
+          "Furniture > Office Furniture",
+          "Furniture > Chairs",
+          1
+        ],
+        [
+          "Hardware > Tool Accessories",
+          "Hardware > Tool Accessories",
+          1
+        ],
+        [
+          "Health & Beauty > Personal Care",
+          "NONE",
+          1
+        ],
+        [
+          "Home & Garden > Lawn & Garden",
+          "Furniture > Chairs",
+          1
+        ],
+        [
+          "Home & Garden > Lighting",
+          "Electronics > Electronics Accessories",
+          1
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Apparel & Accessories > Clothing",
+          1
+        ],
+        [
+          "Media > DVDs & Videos",
+          "Media > DVDs & Videos",
+          1
+        ],
+        [
+          "Software > Computer Software",
+          "Furniture > Office Furniture",
+          1
+        ]
+      ],
+      "top_confused": [
+        [
+          "Hardware > Tools > Screwdrivers",
+          "Hardware > Tools > Tool Sets > Hand Tool Sets",
+          2
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "NONE",
+          2
+        ],
+        [
+          "Software > Computer Software > Business & Productivity Software",
+          "NONE",
+          2
+        ],
+        [
+          "Animals & Pet Supplies > Pet Supplies > Pet Collars & Harnesses",
+          "Animals & Pet Supplies > Pet Supplies > Pet Leashes",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Clothing > Outerwear > Chaps",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Clothing > Outerwear > Rain Suits",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Shoes",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Sporting Goods > Exercise & Fitness > Weighted Clothing",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Shirts & Tops",
+          "Apparel & Accessories > Clothing > Uniforms > Contractor Pants & Coveralls",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Underwear & Socks > Socks",
+          "NONE",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Exercise & Fitness > Cardio > Cardio Machines > Stair Climbers & Steppers > Stair Climbers",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Exercise & Fitness > Sport Safety Lights & Reflectors",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Hardware > Building Consumables > Painting Consumables > Paint",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Hardware > Building Consumables > Painting Consumables > Varnishes & Finishes",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Hardware > Tools > Paint Tools > Paint Strainers",
+          1
+        ]
+      ],
+      "memory_gb": 4.8
+    },
+    "llama3.1:8b": {
+      "products": 280,
+      "candidate_recall": 0.9,
+      "leaf_accuracy": 0.8571,
+      "hierarchical_f1": 0.8914,
+      "attributes": {
+        "color": {
+          "precision": 0.9886,
+          "recall": 0.911,
+          "f1": 0.9482,
+          "tp": 174,
+          "fp": 2,
+          "fn": 17
+        },
+        "material": {
+          "precision": 0.9162,
+          "recall": 0.9358,
+          "f1": 0.9259,
+          "tp": 175,
+          "fp": 16,
+          "fn": 12
+        },
+        "gender": {
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6667,
+          "tp": 9,
+          "fp": 0,
+          "fn": 9
+        },
+        "size": {
+          "precision": 1.0,
+          "recall": 0.9677,
+          "f1": 0.9836,
+          "tp": 30,
+          "fp": 0,
+          "fn": 1
+        },
+        "length": {
+          "precision": 0.9348,
+          "recall": 0.7288,
+          "f1": 0.819,
+          "tp": 43,
+          "fp": 3,
+          "fn": 16
+        }
+      },
+      "attribute_macro_f1": 0.8687,
+      "ungrounded_rate": 0.0717,
+      "unnormalized_rate": 0.1381,
+      "none_rate": 0.0,
+      "error_rate": 0.0,
+      "schema_validity": 1.0,
+      "seconds_per_product": 5.83,
+      "products_per_hour": 617,
+      "tokens_per_second": 22.6,
+      "leaf_accuracy_by_type": {
+        "absent": 1.0,
+        "accessory": 0.7857,
+        "bundle": 0.8,
+        "conflict": 0.875,
+        "multi_use": 0.5556,
+        "non_english": 0.3846,
+        "rendered": 0.8962
+      },
+      "wrong_leaf": [
+        "g-010",
+        "g-019",
+        "g-029",
+        "g-030",
+        "g-031",
+        "g-037",
+        "g-038",
+        "g-043",
+        "g-065",
+        "g-100",
+        "g-159",
+        "g-172",
+        "g-176",
+        "g-184",
+        "g-190",
+        "g-193",
+        "g-243",
+        "g-249",
+        "g-252",
+        "g-255",
+        "g-285",
+        "g-286",
+        "h-009",
+        "h-019",
+        "h-020",
+        "h-032",
+        "h-035",
+        "h-037",
+        "h-044",
+        "h-046",
+        "h-048",
+        "h-061",
+        "h-086",
+        "h-087",
+        "h-088",
+        "h-089",
+        "h-090",
+        "h-095",
+        "h-096",
+        "h-100"
+      ],
+      "confusion_depth2": [
+        [
+          "Hardware > Tools",
+          "Hardware > Tools",
+          13
+        ],
+        [
+          "Health & Beauty > Personal Care",
+          "Health & Beauty > Personal Care",
+          13
+        ],
+        [
+          "Animals & Pet Supplies > Pet Supplies",
+          "Animals & Pet Supplies > Pet Supplies",
+          11
+        ],
+        [
+          "Sporting Goods > Outdoor Recreation",
+          "Sporting Goods > Outdoor Recreation",
+          11
+        ],
+        [
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          11
+        ],
+        [
+          "Business & Industrial > Work Safety Protective Gear",
+          "Business & Industrial > Work Safety Protective Gear",
+          10
+        ],
+        [
+          "Food, Beverages & Tobacco > Beverages",
+          "Food, Beverages & Tobacco > Beverages",
+          10
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Home & Garden > Kitchen & Dining",
+          10
+        ],
+        [
+          "Baby & Toddler > Nursing & Feeding",
+          "Baby & Toddler > Nursing & Feeding",
+          9
+        ],
+        [
+          "Religious & Ceremonial > Religious Items",
+          "Religious & Ceremonial > Religious Items",
+          9
+        ],
+        [
+          "Software > Computer Software",
+          "Software > Computer Software",
+          9
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          8
+        ],
+        [
+          "Electronics > Audio",
+          "Electronics > Audio",
+          8
+        ],
+        [
+          "Media > Music & Sound Recordings",
+          "Media > Music & Sound Recordings",
+          8
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Apparel & Accessories > Clothing",
+          7
+        ],
+        [
+          "Office Supplies > Office Instruments",
+          "Office Supplies > Office Instruments",
+          7
+        ],
+        [
+          "Toys & Games > Games",
+          "Toys & Games > Games",
+          6
+        ],
+        [
+          "Cameras & Optics > Optics",
+          "Cameras & Optics > Optics",
+          5
+        ],
+        [
+          "Electronics > Electronics Accessories",
+          "Electronics > Electronics Accessories",
+          5
+        ],
+        [
+          "Food, Beverages & Tobacco > Food Items",
+          "Food, Beverages & Tobacco > Food Items",
+          5
+        ],
+        [
+          "Furniture > Office Furniture",
+          "Furniture > Office Furniture",
+          5
+        ],
+        [
+          "Furniture > Tables",
+          "Furniture > Tables",
+          5
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Apparel & Accessories > Shoes",
+          4
+        ],
+        [
+          "Baby & Toddler > Baby Transport",
+          "Baby & Toddler > Baby Transport",
+          4
+        ],
+        [
+          "Cameras & Optics > Camera & Optic Accessories",
+          "Cameras & Optics > Camera & Optic Accessories",
+          4
+        ],
+        [
+          "Electronics > Communications",
+          "Electronics > Communications",
+          4
+        ],
+        [
+          "Furniture > Shelving",
+          "Furniture > Shelving",
+          4
+        ],
+        [
+          "Luggage & Bags > Luggage Accessories",
+          "Luggage & Bags > Luggage Accessories",
+          4
+        ],
+        [
+          "Software > Video Game Software",
+          "Software > Video Game Software",
+          4
+        ],
+        [
+          "Sporting Goods > Exercise & Fitness",
+          "Sporting Goods > Exercise & Fitness",
+          4
+        ],
+        [
+          "Toys & Games > Puzzles",
+          "Toys & Games > Puzzles",
+          4
+        ],
+        [
+          "Toys & Games > Toys",
+          "Toys & Games > Toys",
+          4
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Hardware > Building Consumables",
+          3
+        ],
+        [
+          "Home & Garden > Decor",
+          "Home & Garden > Decor",
+          3
+        ],
+        [
+          "Luggage & Bags > Suitcases",
+          "Luggage & Bags > Suitcases",
+          3
+        ],
+        [
+          "Office Supplies > General Office Supplies",
+          "Office Supplies > General Office Supplies",
+          3
+        ],
+        [
+          "Religious & Ceremonial > Memorial Ceremony Supplies",
+          "Religious & Ceremonial > Memorial Ceremony Supplies",
+          3
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Sporting Goods > Outdoor Recreation",
+          2
+        ],
+        [
+          "Home & Garden > Linens & Bedding",
+          "Home & Garden > Linens & Bedding",
+          2
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Luggage & Bags > Backpacks",
+          2
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Sporting Goods > Outdoor Recreation",
+          2
+        ],
+        [
+          "Media > Books",
+          "Media > Books",
+          2
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Apparel & Accessories > Clothing Accessories",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Apparel & Accessories > Shoes",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Health & Beauty > Health Care",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing",
+          "Sporting Goods > Outdoor Recreation",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing Accessories",
+          "Apparel & Accessories > Clothing Accessories",
+          1
+        ],
+        [
+          "Apparel & Accessories > Handbag & Wallet Accessories",
+          "Apparel & Accessories > Handbag & Wallet Accessories",
+          1
+        ],
+        [
+          "Apparel & Accessories > Handbags, Wallets & Cases",
+          "Apparel & Accessories > Handbags, Wallets & Cases",
+          1
+        ],
+        [
+          "Apparel & Accessories > Jewelry",
+          "Apparel & Accessories > Jewelry",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoe Accessories",
+          "Apparel & Accessories > Shoe Accessories",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Exercise & Fitness",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Outdoor Recreation",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts",
+          "Home & Garden > Wood Stoves",
+          1
+        ],
+        [
+          "Business & Industrial > Work Safety Protective Gear",
+          "Apparel & Accessories > Clothing Accessories",
+          1
+        ],
+        [
+          "Cameras & Optics > Cameras",
+          "Cameras & Optics > Cameras",
+          1
+        ],
+        [
+          "Electronics > Communications",
+          "Electronics > GPS Accessories",
+          1
+        ],
+        [
+          "Electronics > Print, Copy, Scan & Fax",
+          "Electronics > Print, Copy, Scan & Fax",
+          1
+        ],
+        [
+          "Electronics > Video Game Console Accessories",
+          "Electronics > Electronics Accessories",
+          1
+        ],
+        [
+          "Furniture > Office Furniture",
+          "Furniture > Chairs",
+          1
+        ],
+        [
+          "Hardware > Tool Accessories",
+          "Hardware > Tool Accessories",
+          1
+        ],
+        [
+          "Health & Beauty > Personal Care",
+          "Animals & Pet Supplies > Pet Supplies",
+          1
+        ],
+        [
+          "Home & Garden > Kitchen & Dining",
+          "Hardware > Tools",
+          1
+        ],
+        [
+          "Home & Garden > Lawn & Garden",
+          "Furniture > Chairs",
+          1
+        ],
+        [
+          "Home & Garden > Lighting",
+          "Electronics > Electronics Accessories",
+          1
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Apparel & Accessories > Clothing",
+          1
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Hardware > Building Materials",
+          1
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Home & Garden > Fireplace & Wood Stove Accessories",
+          1
+        ],
+        [
+          "Luggage & Bags > Backpacks",
+          "Luggage & Bags > Duffel Bags",
+          1
+        ],
+        [
+          "Media > DVDs & Videos",
+          "Media > DVDs & Videos",
+          1
+        ],
+        [
+          "Software > Computer Software",
+          "Office Supplies > General Office Supplies",
+          1
+        ],
+        [
+          "Vehicles & Parts > Vehicle Parts & Accessories",
+          "Home & Garden > Household Supplies",
+          1
+        ]
+      ],
+      "top_confused": [
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Craft Paint, Ink & Glaze > Art & Craft Paint",
+          "Hardware > Building Consumables > Painting Consumables > Paint",
+          3
+        ],
+        [
+          "Software > Computer Software > Business & Productivity Software",
+          "Software > Computer Software > Office Application Software",
+          3
+        ],
+        [
+          "Animals & Pet Supplies > Pet Supplies > Pet Collars & Harnesses",
+          "Animals & Pet Supplies > Pet Supplies > Dog Supplies > Dog Apparel",
+          2
+        ],
+        [
+          "Home & Garden > Kitchen & Dining > Food & Beverage Carriers > Water Bottles",
+          "Sporting Goods > Outdoor Recreation > Hydration Systems",
+          2
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Clothing > Outerwear > Chaps",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Clothing > Outerwear > Rain Suits",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Apparel & Accessories > Shoes",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Outerwear > Coats & Jackets",
+          "Sporting Goods > Outdoor Recreation > Camping & Hiking > Sleeping Pads",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Shirts & Tops",
+          "Apparel & Accessories > Clothing Accessories > Neckties",
+          1
+        ],
+        [
+          "Apparel & Accessories > Clothing > Underwear & Socks > Socks",
+          "Health & Beauty > Health Care > Fitness & Nutrition > Nutrition Bars",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Exercise & Fitness > Cardio > Cardio Machines > Stair Climbers & Steppers > Stair Climbers",
+          1
+        ],
+        [
+          "Apparel & Accessories > Shoes",
+          "Sporting Goods > Outdoor Recreation > Camping & Hiking > Hiking Poles",
+          1
+        ],
+        [
+          "Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Tools > Needles & Hooks > Knitting Needles",
+          "Home & Garden > Wood Stoves",
+          1
+        ],
+        [
+          "Business & Industrial > Work Safety Protective Gear > Hardhats",
+          "Apparel & Accessories > Clothing Accessories > Hats",
+          1
+        ],
+        [
+          "Electronics > Communications > Telephony > Mobile Phone Accessories > Mobile Phone Stands",
+          "Electronics > GPS Accessories > GPS Mounts",
+          1
+        ]
+      ],
+      "memory_gb": 5.3
+    }
+  },
+  "parse": {
+    "qwen2.5:3b-instruct": {
+      "queries": 80,
+      "exact_match": 0.7625,
+      "slot_f1": 0.6567,
+      "slots": {
+        "colors": {
+          "f1": 0.875,
+          "tp": 7,
+          "fp": 2,
+          "fn": 0
+        },
+        "exclude_colors": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "materials": {
+          "f1": 0.32,
+          "tp": 4,
+          "fp": 2,
+          "fn": 15
+        },
+        "exclude_materials": {
+          "f1": 0.4,
+          "tp": 1,
+          "fp": 1,
+          "fn": 2
+        },
+        "price_min": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "price_max": {
+          "f1": 1.0,
+          "tp": 3,
+          "fp": 0,
+          "fn": 0
+        },
+        "gender": {
+          "f1": 1.0,
+          "tp": 5,
+          "fp": 0,
+          "fn": 0
+        },
+        "size": {
+          "f1": 0.8,
+          "tp": 2,
+          "fp": 1,
+          "fn": 0
+        }
+      },
+      "keyword_f1": 0.9426,
+      "fast_path_rate": 0.525,
+      "degraded_rate": 0.0,
+      "sources": {
+        "llm": 38,
+        "rules": 42
+      },
+      "p50_ms": 0,
+      "p95_ms": 1303,
+      "llm_p50_ms": 1225,
+      "llm_p95_ms": 1429,
+      "misses": [
+        {
+          "q": "mesh office chair under $200",
+          "source": "llm",
+          "got": "price_max=20000",
+          "want": "price_max=20000 materials=mesh"
+        },
+        {
+          "q": "stainless steel water bottle",
+          "source": "llm",
+          "got": "exclude_materials=stainless steel",
+          "want": "materials=stainless steel"
+        },
+        {
+          "q": "silicone phone case",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=silicone"
+        },
+        {
+          "q": "wood bookcase",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "glass coffee table",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=glass"
+        },
+        {
+          "q": "canvas backpack",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=canvas"
+        },
+        {
+          "q": "down sleeping bag",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=down"
+        },
+        {
+          "q": "wooden prayer beads",
+          "source": "rules",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "leather luggage tag",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=leather"
+        },
+        {
+          "q": "aluminum suitcase",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=aluminum"
+        },
+        {
+          "q": "rubber yoga mat",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=rubber"
+        },
+        {
+          "q": "nylon safety gloves",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=nylon"
+        },
+        {
+          "q": "wood drum sticks",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "bamboo knitting needles",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=bamboo"
+        },
+        {
+          "q": "office chair no leather",
+          "source": "llm",
+          "got": "materials=leather",
+          "want": "exclude_materials=leather"
+        },
+        {
+          "q": "water bottle not plastic",
+          "source": "llm",
+          "got": "materials=plastic",
+          "want": "exclude_materials=plastic"
+        },
+        {
+          "q": "26 cm cast iron pan",
+          "source": "llm",
+          "got": "size=US 26",
+          "want": "materials=cast iron"
+        },
+        {
+          "q": "red wing boots",
+          "source": "llm",
+          "got": "colors=red",
+          "want": "(none)"
+        },
+        {
+          "q": "pink floyd vinyl",
+          "source": "llm",
+          "got": "colors=pink",
+          "want": "(none)"
+        }
+      ],
+      "memory_gb": 2.1
+    },
+    "qwen2.5:7b-instruct": {
+      "queries": 80,
+      "exact_match": 0.5625,
+      "slot_f1": 0.0952,
+      "slots": {
+        "colors": {
+          "f1": 0.2222,
+          "tp": 1,
+          "fp": 1,
+          "fn": 6
+        },
+        "exclude_colors": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "materials": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 19
+        },
+        "exclude_materials": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "price_min": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "price_max": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "gender": {
+          "f1": 0.3333,
+          "tp": 1,
+          "fp": 0,
+          "fn": 4
+        },
+        "size": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        }
+      },
+      "keyword_f1": 0.8619,
+      "fast_path_rate": 0.525,
+      "degraded_rate": 0.4125,
+      "sources": {
+        "degraded": 33,
+        "llm": 5,
+        "rules": 42
+      },
+      "p50_ms": 0,
+      "p95_ms": 2514,
+      "llm_p50_ms": 2511,
+      "llm_p95_ms": 2515,
+      "misses": [
+        {
+          "q": "green tea",
+          "source": "llm",
+          "got": "colors=green",
+          "want": "(none)"
+        },
+        {
+          "q": "mens hiking boots size 10",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "gender=men size=US 10"
+        },
+        {
+          "q": "leather dog collar",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=leather"
+        },
+        {
+          "q": "mesh office chair under $200",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "price_max=20000 materials=mesh"
+        },
+        {
+          "q": "stainless steel water bottle",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=stainless steel"
+        },
+        {
+          "q": "pink phone case",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "colors=pink"
+        },
+        {
+          "q": "silicone phone case",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=silicone"
+        },
+        {
+          "q": "wood bookcase",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "glass coffee table",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=glass"
+        },
+        {
+          "q": "black headphones under $150",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "price_max=15000 colors=black"
+        },
+        {
+          "q": "yellow cordless drill",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "colors=yellow"
+        },
+        {
+          "q": "canvas backpack",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=canvas"
+        },
+        {
+          "q": "down sleeping bag",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=down"
+        },
+        {
+          "q": "wooden prayer beads",
+          "source": "rules",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "silicone baby bib",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=silicone"
+        },
+        {
+          "q": "leather luggage tag",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=leather"
+        },
+        {
+          "q": "aluminum suitcase",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=aluminum"
+        },
+        {
+          "q": "gold binoculars",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "colors=gold"
+        },
+        {
+          "q": "rubber yoga mat",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=rubber"
+        },
+        {
+          "q": "white hard hat",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "colors=white"
+        },
+        {
+          "q": "safety gloves size XXL",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "size=alpha XXL"
+        },
+        {
+          "q": "nylon safety gloves",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=nylon"
+        },
+        {
+          "q": "orange hair dryer",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "colors=orange"
+        },
+        {
+          "q": "women's trail running shoes",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "gender=women"
+        },
+        {
+          "q": "cotton sun hat",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=cotton"
+        },
+        {
+          "q": "wood drum sticks",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "bamboo knitting needles",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=bamboo"
+        },
+        {
+          "q": "leather office chair",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=leather"
+        },
+        {
+          "q": "headphones under $100",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "price_max=10000"
+        },
+        {
+          "q": "raincoat womens",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "gender=women"
+        },
+        {
+          "q": "backpak for kids",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "gender=kids"
+        },
+        {
+          "q": "office chair no leather",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "exclude_materials=leather"
+        },
+        {
+          "q": "water bottle not plastic",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "exclude_materials=plastic"
+        },
+        {
+          "q": "coffee table no glass",
+          "source": "llm",
+          "got": "(none)",
+          "want": "exclude_materials=glass"
+        },
+        {
+          "q": "26 cm cast iron pan",
+          "source": "degraded",
+          "got": "(none)",
+          "want": "materials=cast iron"
+        }
+      ],
+      "memory_gb": 4.6
+    },
+    "qwen2.5:7b-instruct, no time limit": {
+      "queries": 80,
+      "exact_match": 0.85,
+      "slot_f1": 0.814,
+      "slots": {
+        "colors": {
+          "f1": 0.56,
+          "tp": 7,
+          "fp": 11,
+          "fn": 0
+        },
+        "exclude_colors": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "materials": {
+          "f1": 0.9143,
+          "tp": 16,
+          "fp": 0,
+          "fn": 3
+        },
+        "exclude_materials": {
+          "f1": 0.8,
+          "tp": 2,
+          "fp": 0,
+          "fn": 1
+        },
+        "price_min": {
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 0
+        },
+        "price_max": {
+          "f1": 1.0,
+          "tp": 3,
+          "fp": 0,
+          "fn": 0
+        },
+        "gender": {
+          "f1": 1.0,
+          "tp": 5,
+          "fp": 0,
+          "fn": 0
+        },
+        "size": {
+          "f1": 0.8,
+          "tp": 2,
+          "fp": 1,
+          "fn": 0
+        }
+      },
+      "keyword_f1": 0.915,
+      "fast_path_rate": 0.525,
+      "degraded_rate": 0.0,
+      "sources": {
+        "llm": 38,
+        "rules": 42
+      },
+      "p50_ms": 0,
+      "p95_ms": 3035,
+      "llm_p50_ms": 2628,
+      "llm_p95_ms": 3148,
+      "misses": [
+        {
+          "q": "green tea",
+          "source": "llm",
+          "got": "colors=green",
+          "want": "(none)"
+        },
+        {
+          "q": "mesh office chair under $200",
+          "source": "llm",
+          "got": "price_max=20000",
+          "want": "price_max=20000 materials=mesh"
+        },
+        {
+          "q": "wood bookcase",
+          "source": "llm",
+          "got": "colors=brown,beige,gray materials=wood",
+          "want": "materials=wood"
+        },
+        {
+          "q": "glass coffee table",
+          "source": "llm",
+          "got": "colors=multicolor materials=glass",
+          "want": "materials=glass"
+        },
+        {
+          "q": "canvas backpack",
+          "source": "llm",
+          "got": "colors=brown materials=canvas",
+          "want": "materials=canvas"
+        },
+        {
+          "q": "down sleeping bag",
+          "source": "llm",
+          "got": "(none)",
+          "want": "materials=down"
+        },
+        {
+          "q": "wooden prayer beads",
+          "source": "rules",
+          "got": "(none)",
+          "want": "materials=wood"
+        },
+        {
+          "q": "leather office chair",
+          "source": "llm",
+          "got": "colors=black,brown,beige materials=leather",
+          "want": "materials=leather"
+        },
+        {
+          "q": "coffee table no glass",
+          "source": "llm",
+          "got": "(none)",
+          "want": "exclude_materials=glass"
+        },
+        {
+          "q": "26 cm cast iron pan",
+          "source": "llm",
+          "got": "materials=cast iron size=alpha 26 cm",
+          "want": "materials=cast iron"
+        },
+        {
+          "q": "red wing boots",
+          "source": "llm",
+          "got": "colors=red",
+          "want": "(none)"
+        },
+        {
+          "q": "pink floyd vinyl",
+          "source": "llm",
+          "got": "colors=pink",
+          "want": "(none)"
+        }
+      ],
+      "memory_gb": 4.6
+    }
+  },
+  "paired": {
+    "enrichment": {
+      "llama3.1:8b": {
+        "against": "qwen2.5:7b-instruct",
+        "items": 280,
+        "only_base": 3,
+        "only_this": 9,
+        "p": 0.146
+      }
+    },
+    "parse": {
+      "qwen2.5:7b-instruct": {
+        "against": "qwen2.5:3b-instruct",
+        "items": 80,
+        "only_base": 18,
+        "only_this": 2,
+        "p": 0.0004
+      },
+      "qwen2.5:7b-instruct, no time limit": {
+        "against": "qwen2.5:3b-instruct",
+        "items": 80,
+        "only_base": 3,
+        "only_this": 10,
+        "p": 0.0923
+      }
+    }
+  }
+}

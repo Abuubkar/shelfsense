@@ -1,6 +1,6 @@
 TAXONOMY_URL := https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt
 
-.PHONY: taxonomy test test-int codegen contract-check smoke chaos web web-test golden eval eval-test eval-latency
+.PHONY: taxonomy test test-int codegen contract-check smoke chaos web web-test golden eval eval-test eval-latency sweep
 
 # Download the official Google Product Taxonomy (with IDs) as data/taxonomy/<version>.txt plus its checksum.
 # The version comes from the file's own header. Never fetched at runtime; scripts/load_taxonomy.py reads the file.
@@ -68,3 +68,7 @@ eval-test:
 # 1,000 searches through the API's search path on the catalog, by parse path (live; ~45 min with the reranker).
 eval-latency:
 	uv run python -u evals/run.py --split dev --only latency --live
+
+# Enrichment and query models compared on the dev split (evals/SWEEP.md); LIVE=1 asks Ollama again.
+sweep:
+	uv run python -u evals/sweep.py $(if $(LIVE),--live)

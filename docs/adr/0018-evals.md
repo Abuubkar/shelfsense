@@ -45,6 +45,10 @@ and `evals/REPORT.md`.
 
   The libraries would add a dependency and still leave those choices to configure.
 
+- **Model sweep** (`evals/sweep.py`, `make sweep`): the same enrichment and parse evals per model on the dev
+  split, one recording per section, McNemar's exact test against the default, and memory from `ollama ps`. It
+  reports; defaults change only by a separate decision.
+
 ## Alternatives
 
 - **The catalog's 200k seeded products as the search corpus**: real scale, but most query × product pairs would

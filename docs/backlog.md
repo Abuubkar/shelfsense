@@ -91,3 +91,19 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   (`ms-marco-MiniLM-L-6-v2`), caching rerank scores per (query, product content hash) for repeated head queries,
   or GPU/ONNX acceleration in production. A latency query set written for the catalog is needed too: 17 of the
   80 golden dev queries find nothing in it.
+- **Model choice: recommendation from the 6b sweep, defaults unchanged** (`evals/SWEEP.md`).
+  - *Enrichment: keep qwen2.5:7b.* llama3.1:8b scored 2.1 points more leaf accuracy (0.857 vs 0.836: 9 products
+    only it got right, 3 only qwen did, McNemar p = 0.15, so not shown to be better), mostly on accessories,
+    bundles and non-English listings. But its ungrounded rate is 7.2% (gate 0.05), its attribute macro F1 is 2.4
+    points lower (length 0.82 vs 0.94, gender 0.67 vs 0.71), and it is 5% slower with 0.5 GB more memory. Neither
+    model fixes hierarchical F1 or candidate recall: candidate recall is the embedding pre-filter's (0.900 for
+    both), so the candidate-recall item above is the bigger lever.
+  - *Query parsing: keep qwen2.5:3b under the 2.5 s limit.* The 7B parses better given time (exact match 0.850 vs
+    0.762, slot F1 0.814 vs 0.657; 10 queries vs 3, p = 0.09 over 80), but its model-path p50 is 2.6 s and p95
+    3.1 s, so under the production limit 41% of its parses time out and it scores far worse (exact match 0.562,
+    p < 0.001). It would miss the 3 s model-path gate before search even starts. Try first: prompt `query/2`
+    with material and brand examples (item above) on the 3B, then re-run `make sweep`. If the 7B's quality is
+    still wanted, it could pre-parse the most frequent queries offline into the Redis cache (31% of the latency
+    run's searches were cache hits), keeping the 3B for the live path.
+  - *Not run: qwen2.5:14b.* ~9 GB of 4-bit weights against ~7 GB free on this 16 GB Mac with the containers up.
+    Worth a run on a 32 GB machine or a GPU host before slice 7 sizes production.
