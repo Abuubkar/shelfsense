@@ -233,7 +233,9 @@ def _filters_text(filters: dict[str, Any]) -> str:
 
 async def build_index(os: Any, products: list[dict]) -> None:
     """A throwaway index of every golden product, mapped like products_v1, with documents built by the same
-    function the index worker uses. Typed facets come from the supplier columns (normalize.typed_attributes)."""
+    function the index worker uses. Facets come from the supplier columns (normalize.typed_attributes), then, as
+    in production, from the extracted attributes, which here are the gold ones: like the gold categories, search
+    is measured as if enrichment were perfect."""
     template = search.INDEX_TEMPLATE["template"]
     if await os.indices.exists(index=INDEX):
         await os.indices.delete(index=INDEX)
@@ -246,7 +248,9 @@ async def build_index(os: Any, products: list[dict]) -> None:
                           description=p["description"], brand=p["brand"], gtin=None, price_minor=p["price_minor"],
                           currency=p["currency"], updated_at=datetime(2026, 1, 1, tzinfo=UTC),
                           **typed_attributes(p["attributes"]))
-        doc = product_doc(product, p.get("supplier", "golden"), p["gold"]["node_id"], p["gold"]["path"], {}, vector)
+        extracted = {k: v for k, v in p["gold"]["attributes"].items() if v != "ABSENT"}
+        doc = product_doc(product, p.get("supplier", "golden"), p["gold"]["node_id"], p["gold"]["path"], extracted,
+                          vector)
         lines += [json.dumps({"index": {"_index": INDEX, "_id": doc["product_id"]}}), json.dumps(doc)]
     response = await os.bulk(body="\n".join(lines) + "\n", refresh="true")
     if response["errors"]:
@@ -522,6 +526,11 @@ async def main() -> None:
     if args.baseline:
         result["baseline_drops"] = check_baseline(metrics, json.loads(args.baseline.read_text())["metrics"])
     results_path.parent.mkdir(exist_ok=True)
+    if results_path.exists():  # results are kept, never overwritten (evals/archive/)
+        archived = EVALS / "archive" / "results" / f"{args.split}-{previous.get('mode', 'run')}-" \
+            f"{datetime.fromtimestamp(results_path.stat().st_mtime, UTC):%Y%m%dT%H%M%S}.json"
+        archived.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(results_path, archived)
     results_path.write_text(json.dumps(result, indent=2) + "\n")
     report_path = EVALS / ("REPORT.md" if args.split == "dev" else f"REPORT-{args.split}.md")
     report_path.write_text(report(result))
