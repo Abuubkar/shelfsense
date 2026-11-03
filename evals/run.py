@@ -164,6 +164,7 @@ async def eval_enrichment(session: Any, products: list[dict], cassette: llm.Cass
         "products_per_hour": round(3600 / seconds) if seconds else 0,
         "tokens_per_second": round(output_tokens / (eval_ms / 1000), 1) if eval_ms else 0.0,
         "leaf_accuracy_by_type": {t: round(sum(v) / len(v), 4) for t, v in sorted(by_type.items())},
+        "wrong_leaf": sorted(r["id"] for r in rows if r["predicted"] != r["gold"]),  # for paired comparisons
         "confusion_depth2": [[g, p, n] for (g, p), n in sorted(depth2.items(), key=lambda x: (-x[1], x[0]))],
         "top_confused": [[g, p, n] for (g, p), n in sorted(confused.items(), key=lambda x: (-x[1], x[0]))[:15]],
     }

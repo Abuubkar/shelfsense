@@ -342,3 +342,30 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 - **What we did.** Model replies are recorded with their wall time and keyed by a hash of the whole request.
   The metrics read model time from the recording. The dev replay matched the live run in every enrichment, parse
   and search metric; OpenSearch returned the same rankings from a fresh index.
+
+## Slice 6b
+
+### The time limit hid the 7B query model's quality
+
+- **Problem.** Under production's 2.5 s `QUERY_TIMEOUT_S`, qwen2.5:7b timed out on 35 of the 38 queries that
+  reached the model; its slot F1 of 0.05 measured the timeout, not its parsing.
+- **What we did.** Added a sweep row for the 7B with a 30 s limit (0.814 slot F1, p50 2.6 s) and kept the
+  production-limit row: the gap between them is the cost of the limit. A paired McNemar test now goes with every
+  comparison, since 80 queries and 280 products leave differences of a few items within chance.
+
+### Re-running one section shouldn't cost the other's 80 minutes
+
+- **Problem.** The first sweep kept one recording for both sections, so adding a query-parsing row meant asking
+  both enrichment models again (~80 min).
+- **What we did.** One recording per section (`sweep-dev-enrich`, `sweep-dev-parse`); `--live --only parse`
+  re-asks the query models and replays enrichment. The first combined recording was split by replaying its
+  enrichment calls (same numbers), then archived. A full replay matches the live results exactly.
+
+### Timeouts near the limit aren't deterministic
+
+- **Problem.** At temperature 0 the replies repeat, but wall time doesn't: the 7B under the 2.5 s limit degraded
+  43.8% of parses in one live run and 41.2% in the next, and qwen2.5:7b enrichment ran at 5.52 s per product in
+  the sweep against 5.72 s in `make eval LIVE=1` (3.5%).
+- **What we did.** Reported as measured. Quality metrics repeated exactly between runs (qwen2.5:7b enrichment and
+  the 3B's parses); anything that depends on a time limit carries a few points of run-to-run noise.
+
