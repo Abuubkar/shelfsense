@@ -1,7 +1,7 @@
 {
   "split": "dev",
-  "mode": "replay",
-  "finished": "2026-11-03 09:59 UTC",
+  "mode": "live",
+  "finished": "2026-11-03 17:47 UTC",
   "models": {
     "enrich": "qwen2.5:7b-instruct",
     "query": "qwen2.5:3b-instruct"
@@ -828,6 +828,20 @@
           "ndcg10": 0.4935
         }
       ]
+    },
+    "latency": {
+      "searches": 1000,
+      "counts": {
+        "cache": 313,
+        "llm": 38,
+        "rules": 649
+      },
+      "cache_p50_ms": 510,
+      "cache_p95_ms": 1876,
+      "llm_p50_ms": 2230,
+      "llm_p95_ms": 3630,
+      "rules_p50_ms": 170,
+      "rules_p95_ms": 2110
     }
   },
   "gates": [
@@ -901,6 +915,24 @@
       "metric": "search.zero_result_rate",
       "value": 0.0375,
       "gate": "<= 0.02",
+      "passed": false
+    },
+    {
+      "metric": "latency.rules_p95_ms",
+      "value": 2110,
+      "gate": "<= 150",
+      "passed": false
+    },
+    {
+      "metric": "latency.llm_p95_ms",
+      "value": 3630,
+      "gate": "<= 3000",
+      "passed": false
+    },
+    {
+      "metric": "latency.cache_p95_ms",
+      "value": 1876,
+      "gate": "<= 180",
       "passed": false
     }
   ]

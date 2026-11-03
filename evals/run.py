@@ -509,7 +509,7 @@ async def main() -> None:
             if "search" in sections:
                 metrics["search"] = await eval_search(session, corpus, queries)
         finally:
-            if args.live:
+            if args.live and sections & {"enrich", "parse", "search"}:  # a latency-only run records nothing
                 cassette.save()
         if "latency" in sections:
             if not args.live:

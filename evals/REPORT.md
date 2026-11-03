@@ -1,6 +1,6 @@
 # Shelfsense eval report (dev split)
 
-replay run, 2026-11-03 09:59 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
+live run, 2026-11-03 17:47 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
 
 Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 
@@ -20,6 +20,9 @@ Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 | search.ndcg10 | 0.8147 | >= 0.72 | pass |
 | search.ndcg10_over_bm25 | 0.1044 | >= 0.08 | pass |
 | search.zero_result_rate | 0.0375 | <= 0.02 | **miss** |
+| latency.rules_p95_ms | 2110 | <= 150 | **miss** |
+| latency.llm_p95_ms | 3630 | <= 3000 | **miss** |
+| latency.cache_p95_ms | 1876 | <= 180 | **miss** |
 
 ## Enrichment (280 products)
 
@@ -177,3 +180,11 @@ Lowest nDCG@10 (shipped configuration):
 | bag to carry a laptop and books | tail | 0.253 |
 | mens hiking boots size 10 | torso | 0.471 |
 | teliscope | tail | 0.493 |
+
+## Search latency (1000 searches on the catalog, live)
+
+| Parse path | Searches | p50 ms | p95 ms |
+|---|---:|---:|---:|
+| cache | 313 | 510 | 1876 |
+| llm | 38 | 2230 | 3630 |
+| rules | 649 | 170 | 2110 |
