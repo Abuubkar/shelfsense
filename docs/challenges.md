@@ -325,7 +325,15 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
   (M1 Pro, CPU) reranking the head of 50 took 0.8–2.0 s per search; embedding plus hybrid retrieval took
   10–170 ms.
 - **What we did.** Measured it before the 1,000-search latency run and raised it rather than running into the
-  miss. Options: a smaller head, a smaller cross-encoder, a GPU, or a separate gate for reranked searches.
+  miss. Options: a smaller head, a smaller cross-encoder, a GPU, or a separate gate for reranked searches. The
+  decision was to run it as is and report the misses. `make eval-latency` (1,000 searches, 60/30/10 head, torso,
+  tail) missed all three gates: p95 2,110 ms on the rules path (gate 150), 1,876 ms on cache hits (gate 180) and
+  3,630 ms on model parses (gate 3,000). Reranking costs about 40 ms per product, so a full head of 50 takes
+  1.2–2.1 s. Embedding, hybrid retrieval and the tail together took a median 29 ms (max 160 ms).
+- **Why the p50s look better than they are.** The golden queries were written for the golden set, not the
+  catalog: the catalog's 18 seed kinds leave 17 of the 80 dev queries with no results and 30 with fewer than 50,
+  so those searches rerank little or nothing. The rules-path p50 of 170 ms is mostly them. Only the p95s describe
+  a search with a full head.
 
 ### Replays match the live run exactly
 

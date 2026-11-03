@@ -84,3 +84,10 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   model, and measure.
 - **`wooden` doesn't wake the query model** (slice 6a). The fast path's material words are the normalized
   vocabulary, so "wooden prayer beads" skips the model and loses its material.
+- **Search latency is the CPU reranker** (slice 6a, measured by `make eval-latency`). p95 2,110 ms on the rules
+  path, 1,876 ms on cache hits and 3,630 ms on model parses, against gates of 150, 180 and 3,000 ms. Reranking
+  costs ~40 ms per product on the M1 Pro CPU; everything else is a median 29 ms. Options, each to measure with
+  the eval: a smaller head (20 would be ~0.8 s, and nDCG needs checking), a smaller cross-encoder
+  (`ms-marco-MiniLM-L-6-v2`), caching rerank scores per (query, product content hash) for repeated head queries,
+  or GPU/ONNX acceleration in production. A latency query set written for the catalog is needed too: 17 of the
+  80 golden dev queries find nothing in it.
