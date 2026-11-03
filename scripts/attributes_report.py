@@ -96,7 +96,7 @@ async def main() -> None:
             assert product is not None
             raw = dict((await session.execute(select(ProductAttribute.name, ProductAttribute.value)
                                               .where(ProductAttribute.product_id == product_id))).all())
-            fields = evidence_fields(product, raw)
+            fields = evidence_fields(product.title, product.brand, product.description, raw)
             attrs = list(await session.scalars(select(ProductExtractedAttribute)
                                                .where(ProductExtractedAttribute.product_id == product_id)))
             run = await session.scalar(select(EnrichmentRun).where(EnrichmentRun.product_id == product_id,

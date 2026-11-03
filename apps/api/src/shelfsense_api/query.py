@@ -144,7 +144,7 @@ async def understand(q: str) -> QueryParse:
 
     key = _cache_key(normalize_query(text))
     try:
-        cached = await cache().get(key)
+        cached = await cache().get(key) if settings.query_cache_enabled else None
         if cached:
             parse = QueryParse.model_validate_json(cached)
             return parse.model_copy(update={"source": "cache", "ms": _ms(started)})
@@ -158,6 +158,8 @@ async def understand(q: str) -> QueryParse:
         log.info("query parse degraded for %r: %s", text, exc)
         return QueryParse(source="degraded", keywords=text, ms=_ms(started))
     parse.ms = _ms(started)
+    if not settings.query_cache_enabled:
+        return parse
     try:
         await cache().set(key, parse.model_dump_json(), ex=settings.query_cache_ttl_s)
     except (redis.RedisError, OSError) as exc:

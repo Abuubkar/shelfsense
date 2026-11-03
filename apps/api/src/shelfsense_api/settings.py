@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     query_keep_alive: str = "30m"
     redis_url: str = "redis://localhost:6380/0"
     query_cache_ttl_s: int = 24 * 3600
+    # The evals turn the cache off so every parse is the model's own (evals/run.py).
+    query_cache_enabled: bool = True
 
     # SQS and S3. Locally that's Floci (docs/adr/0008); leave aws_endpoint_url empty for real AWS.
     aws_endpoint_url: str | None = "http://localhost:4566"

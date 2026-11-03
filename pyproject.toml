@@ -19,7 +19,9 @@ shelfsense-worker-enrich = { workspace = true }
 shelfsense-worker-index = { workspace = true }
 
 [tool.pytest.ini_options]
-testpaths = ["apps/api/tests"]
+testpaths = ["apps/api/tests", "evals/tests"]
+# The eval scripts are plain modules in evals/, not a package.
+pythonpath = ["evals"]
 markers = ["integration: needs Docker (testcontainers); run with make test-int"]
 addopts = "--strict-markers"
 
