@@ -1,7 +1,7 @@
 {
   "split": "dev",
   "mode": "replay",
-  "finished": "2026-11-04 03:06 UTC",
+  "finished": "2026-11-04 03:14 UTC",
   "models": {
     "enrich": "qwen2.5:7b-instruct",
     "query": "qwen2.5:3b-instruct"
@@ -1013,5 +1013,7 @@
       "gate": "<= 180",
       "passed": false
     }
-  ]
+  ],
+  "baseline_drops": [],
+  "newly_missed": []
 }

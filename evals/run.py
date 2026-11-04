@@ -308,6 +308,9 @@ async def build_index(os: Any, products: list[dict], mapping: str) -> str:
 
 
 async def put_pipelines(os: Any) -> dict[str, str]:
+    # The shipped path (service.search_page) uses production's pipeline; on a fresh OpenSearch, as in CI, nothing
+    # else has created it.
+    await os.search_pipeline.put(id=search.PIPELINE, body=search.pipeline_body())
     ids = {}
     for n, (name, normalization) in enumerate(NORMALIZATIONS.items()):
         ids[name] = f"evals-hybrid-{n}"
