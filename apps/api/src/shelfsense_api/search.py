@@ -314,9 +314,10 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
     try:
         pit = position.get("pit") or (await os.create_pit(
             index=index, params={"keep_alive": settings.search_cursor_ttl}))["pit_id"]
+        timings["pit"] = _ms(started)
         vector = await embedding if embedding else None
         timings["embed"] = _ms(started)
-        facets_task = asyncio.create_task(_facets(os, pit, q, vector, filters))
+        facets_task = asyncio.create_task(_facets(os, pit, q, vector, filters, timings))
         rank = position["rank"]
         # Reranking only matters for pages that show head products; later pages need just the head's IDs.
         reranked = rank < HEAD_SIZE
@@ -427,15 +428,17 @@ async def _tail(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | Non
 
 
 async def _facets(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | None,
-                  filters: Filters) -> tuple[int, dict[str, list[FacetValue]]]:
+                  filters: Filters, timings: dict[str, int]) -> tuple[int, dict[str, list[FacetValue]]]:
     """Total and facet counts over the whole result set, after all filters (drill-down facets)."""
     aggs: dict[str, Any] = {name: {"terms": {"field": name, "size": FACET_SIZE}}
                             for name in ("brand", "color", "category_id")}
     aggs["price"] = {"range": {"field": "price_minor", "ranges": [
         {"key": key} | ({"from": lo} if lo is not None else {}) | ({"to": hi} if hi is not None else {})
         for key, lo, hi in PRICE_BUCKETS]}}
+    started = time.perf_counter()
     response = await os.search(body={"size": 0, "track_total_hits": True, "query": match_set(q, vector, filters),
                                      "aggs": aggs, "pit": {"id": pit, "keep_alive": settings.search_cursor_ttl}})
+    timings["facets"] = _ms(started)
     facets = {name: [FacetValue(str(b["key"]), b["doc_count"]) for b in agg["buckets"] if b["doc_count"]]
               for name, agg in response["aggregations"].items()}
     return response["hits"]["total"]["value"], facets
