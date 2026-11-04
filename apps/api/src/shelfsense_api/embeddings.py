@@ -6,6 +6,8 @@ from fastembed import TextEmbedding
 from fastembed.common.model_description import ModelSource
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 
+from shelfsense_api.settings import settings
+
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 # ms-marco-MiniLM-L-6-v2 quantized to int8 (the same repo's onnx/model_int8.onnx): ~2x faster than its fp32 build on
 # the CPU, ~20x faster than bge-reranker-base, and no worse on the golden set (docs/adr/0021).
@@ -25,7 +27,7 @@ def _embedder() -> TextEmbedding:
 @cache
 def _reranker() -> TextCrossEncoder:
     # ~23 MB on first use.
-    return TextCrossEncoder(model_name=RERANK_MODEL)
+    return TextCrossEncoder(model_name=RERANK_MODEL, threads=settings.rerank_threads)
 
 
 def product_text(title: str, brand: str | None, description: str | None) -> str:
