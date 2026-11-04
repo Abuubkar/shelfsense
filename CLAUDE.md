@@ -14,6 +14,11 @@ Marketplace catalog enrichment and search: messy supplier feeds in, classified p
 
 ```bash
 docker compose up -d --wait                  # Postgres :5436, OpenSearch :9201, Floci (SQS, S3) :4566, Redis :6380
+docker compose --profile observability up -d # + collector :4328, Jaeger :16687, Prometheus :9092, Grafana :3022
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328   # then run the API/workers: traced (off when unset)
+uv run python scripts/trace_tree.py --product <id> | --search [--path llm]   # a trace from Jaeger, links followed
+uv run python scripts/make_dashboards.py     # regenerate the Grafana dashboards (never edit their JSON)
+TRACE_SAMPLE_PERCENT=100 docker compose --profile observability up -d otel-collector   # keep every trace
 uv run alembic upgrade head
 uv run python scripts/init_aws.py            # feeds bucket, enrich and index queues with DLQs; a rerun is a no-op
 make taxonomy                                # only to fetch a new release; 2021-09-21 is committed
@@ -134,6 +139,13 @@ make contract-check                          # oasdiff: the code's spec vs contr
   move. Merges to main publish signed images to `ghcr.io/abuubkar/shelfsense-<service>`.
 - A new migration must pass squawk (`make migrations-lint`): `SET LOCAL lock_timeout` before the first statement
   that locks a busy table (a foreign key to `products` locks it too).
+- Telemetry (ADR 0022): every process calls `telemetry.setup_telemetry` once; it's a no-op unless
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Never put product text, query text, prompts or replies in a span
+  attribute or a log line: `HashingSpanProcessor` hashes known keys (and a test pins it), but name new attributes
+  so it can (`*_title`, `*_query`, …) or record a hash yourself (`telemetry.fingerprint`). A message sent through
+  `aws.send` carries the trace; a consumer links to it. Metrics are defined only in `metrics.py`; a new counter
+  gets its label sets in `_COUNTERS` (primed at 0). Gauge alerts use `last_over_time(...[1m])`. Every alert has a
+  runbook in `docs/runbooks/`.
 - Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;

@@ -60,7 +60,63 @@ services:
       timeout: 2s
       retries: 15
 
+  # Observability (docs/adr/0022), only with --profile observability. Processes on the host send OTLP to the
+  # collector (OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328), which tail-samples traces into Jaeger, writes
+  # metrics to Prometheus and logs to Loki. Ports are offset: Ledgerline's stack holds 4318, 16686, 9090 and 3001.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    profiles: [observability]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./infra/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      TRACE_SAMPLE_PERCENT: ${TRACE_SAMPLE_PERCENT:-5}
+    ports:
+      - "127.0.0.1:4328:4318"
+    depends_on: [jaeger, prometheus, loki]
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0
+    profiles: [observability]
+    ports:
+      - "127.0.0.1:16687:16686"  # UI and the query API scripts/trace_tree.py reads
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    profiles: [observability]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-otlp-receiver",
+              "--enable-feature=exemplar-storage", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./infra/prometheus:/etc/prometheus:ro
+      - prometheusdata:/prometheus
+    ports:
+      - "127.0.0.1:9092:9090"
+
+  loki:
+    image: grafana/loki:3.7.9
+    profiles: [observability]
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./infra/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - lokidata:/loki
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # development only: no login to look at the dashboards
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/pipeline.json
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3022:3000"
+    depends_on: [prometheus, loki, jaeger]
+
 volumes:
   pgdata:
   osdata:
   flocidata:
+  prometheusdata:
+  lokidata:
