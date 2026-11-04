@@ -77,7 +77,7 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - REST routes and GraphQL resolvers both call `service.py`; business rules never live in a route or resolver.
   Errors are raised as `schemas.ApiProblem` with a code from `ProblemCode` (documented in docs/problems.md).
 - Pagination is cursor-only, through `cursor.py` (signed, bound to the query). No offsets anywhere.
-- Search (ADR 0006): the result set is lexical OR radial k-NN after filters; the head (10) is hybrid + rerank, the
+- Search (ADR 0006): the result set is lexical OR radial k-NN after filters; the head (5) is hybrid + rerank, the
   tail is `search_after` on the same PIT excluding the head. Every query of one search reads its PIT, and a PIT
   sort always ends with the `product_id` tiebreaker. Don't store the head in the cursor; re-run it on the PIT.
 - OpenSearch is derived data: change or remove a field with a new index version in `search.TEMPLATES`, built and
