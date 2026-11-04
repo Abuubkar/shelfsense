@@ -18,9 +18,11 @@ const config: Config = {
 // compiled too; everything else in node_modules is left alone. pnpm nests packages under .pnpm/<name>@<version>/.
 const ESM_JS_PACKAGES = ["until-async"];
 
-export default async () => {
+const jestConfig = async () => {
   const resolved = await createJestConfig(config)();
   const names = ESM_JS_PACKAGES.join("|");
   resolved.transformIgnorePatterns = [`/node_modules/(?!(.*\\.mjs$|\\.pnpm/(${names})@|(${names})/))`];
   return resolved;
 };
+
+export default jestConfig;

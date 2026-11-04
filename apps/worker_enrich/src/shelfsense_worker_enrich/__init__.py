@@ -3,7 +3,7 @@ the index queue, resubmits transient failures and dead-letters the rest."""
 
 import asyncio
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from shelfsense_api import aws, db
 from shelfsense_api.classify import classify_product, needs_enrichment
@@ -58,6 +58,6 @@ async def enrich_one(product_id: uuid.UUID, attempt: int, llm_slots: asyncio.Sem
         try:
             await classify_product(session, product, attempt, taxonomy_version)
         except ModelError as exc:
-            status = "transient" if exc.code in TRANSIENT_CODES else "permanent"
+            status: Literal["transient", "permanent"] = "transient" if exc.code in TRANSIENT_CODES else "permanent"
             return Outcome(product_id, status, exc.code, str(exc))
     return Outcome(product_id, "done")

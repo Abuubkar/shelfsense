@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+/** The parent keys it by the searched text, so a new search (or Back) starts it afresh from `value`. */
 export function SearchBox({ value, onSearch }: { value: string; onSearch: (q: string) => void }) {
   const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
   return (
     <form className="search" role="search" onSubmit={(e) => { e.preventDefault(); onSearch(text.trim()); }}>
       <label htmlFor="q" className="visually-hidden">Search products</label>

@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import delete, func, literal_column, select, update
+from sqlalchemy import Boolean, delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -218,13 +218,13 @@ async def upsert_rows(session: AsyncSession, supplier_id: uuid.UUID, batch: list
          "content_hash": r.content_hash(), **typed_attributes(r.attributes)}
         for r in batch
     ]
-    stmt = insert(Product).values(rows)
+    values = insert(Product).values(rows)
     updatable = [k for k in rows[0] if k not in ("supplier_id", "supplier_sku")]
-    stmt = stmt.on_conflict_do_update(
+    stmt = values.on_conflict_do_update(
         index_elements=["supplier_id", "supplier_sku"],
-        set_={**{k: stmt.excluded[k] for k in updatable}, "updated_at": literal_column("now()")},
-        where=Product.content_hash != stmt.excluded.content_hash,
-    ).returning(Product.id, Product.supplier_sku, literal_column("xmax = 0"))  # xmax is 0 on a fresh insert
+        set_={**{k: values.excluded[k] for k in updatable}, "updated_at": literal_column("now()")},
+        where=Product.content_hash != values.excluded.content_hash,
+    ).returning(Product.id, Product.supplier_sku, literal_column("xmax = 0", Boolean))  # xmax is 0 on a fresh insert
     written = (await session.execute(stmt)).all()
     inserted = sum(1 for *_, fresh in written if fresh)
     result.inserted += inserted

@@ -255,4 +255,5 @@ class Query:
 
 
 schema = strawberry.Schema(query=Query)
-graphql_router: GraphQLRouter[Context, None] = GraphQLRouter(schema, context_getter=get_context)
+# Strawberry's stubs don't accept a FastAPI dependency written as an async generator, which it supports.
+graphql_router: GraphQLRouter[Context, None] = GraphQLRouter(schema, context_getter=get_context)  # type: ignore[arg-type]

@@ -9,7 +9,7 @@ import asyncio
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from opensearchpy import AsyncOpenSearch, TransportError
 from opensearchpy import ConnectionError as OpenSearchConnectionError
@@ -83,6 +83,8 @@ def product_doc(p: Product, supplier: str, node_id: int | None, path: str | None
 def _facets(p: Product, extracted: dict[str, str]) -> dict[str, Any]:
     """Facet values: the supplier's own columns first, then what the model read from the listing (grounded)."""
     gender = p.gender or extracted.get("gender")
+    system: str | None
+    size: str | None
     if p.size_system and p.size_value:
         system, size = p.size_system, p.size_value
     else:
@@ -134,8 +136,8 @@ async def _bulk(os: AsyncOpenSearch, batch: list[str], docs: dict[str, dict[str,
         if exc.status_code == 429:
             sizer.rejected()
         transient = exc.status_code == 429 or (isinstance(exc.status_code, int) and exc.status_code >= 500)
-        status = "transient" if transient else "permanent"
-        return {p: Outcome(uuid.UUID(p), status, f"bulk_{exc.status_code}", str(exc.error)) for p in batch}
+        kind: Literal["transient", "permanent"] = "transient" if transient else "permanent"
+        return {p: Outcome(uuid.UUID(p), kind, f"bulk_{exc.status_code}", str(exc.error)) for p in batch}
 
     outcomes, rejected = {}, False
     for item in response["items"]:
