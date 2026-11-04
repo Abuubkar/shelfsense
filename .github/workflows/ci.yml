@@ -293,10 +293,9 @@ jobs:
           k6 run --quiet -e BASE_URL=http://localhost:8020 perf/search.js | tee build-k6.txt
       - name: Where the time goes (rules-path stages)
         if: always() && steps.changes.outputs.run == 'true'
-        # k6 leaves up to 300 open PITs (OpenSearch's per-node cap, docs/backlog.md): close them on this throwaway node.
-        run: |
-          curl -fs -X DELETE localhost:9201/_search/point_in_time/_all > /dev/null
-          uv run python scripts/search_timings.py --rounds 1 | tee build-stages.txt
+        # k6 leaves up to 300 open PITs (OpenSearch's per-node cap, docs/backlog.md): --close-pits closes them on
+        # this throwaway node. The reranker's onnxruntime thread counts are compared on the runner's 4 vCPUs.
+        run: uv run python scripts/search_timings.py --rounds 1 --close-pits --rerank-threads default,1,2,4 | tee build-stages.txt
       - name: Summary
         if: always() && steps.changes.outputs.run == 'true'
         run: |

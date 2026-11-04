@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     knn_min_score: float = 0.80
     # Weights of the BM25 and k-NN scores after min-max normalization, in that order.
     hybrid_weights: tuple[float, float] = (0.5, 0.5)
+    # onnxruntime threads for the reranker; None is onnxruntime's default (one per physical core). On a small,
+    # busy machine, fewer threads can contend less with OpenSearch's (scripts/search_timings.py --rerank-threads compares).
+    rerank_threads: int | None = None
     # Signs pagination cursors so clients can't forge or edit them. Override in every real deployment.
     cursor_secret: str = "dev-only-cursor-secret"
 
