@@ -88,7 +88,7 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - Query understanding goes through `query.understand` (rules fast path, Redis cache, small model under
   `QUERY_TIMEOUT_S`, degrade on any failure) and never raises. Page 1's parse travels in the cursor; never
   re-parse on later pages (ADR 0014).
-- Embedding and reranking go through `embeddings.py` (bge-small, ms-marco-MiniLM-L-6-v2); never load a fastembed model
+- Embedding and reranking go through `embeddings.py` (bge-small, ms-marco-MiniLM-L-6-v2 int8); never load a fastembed model
   elsewhere.
 - Feed rejections use spreadsheet row numbers (header = row 1), counted per CSV record, not per line.
 - Committing a feed again must change nothing: products upsert only on a changed content hash, rejections are

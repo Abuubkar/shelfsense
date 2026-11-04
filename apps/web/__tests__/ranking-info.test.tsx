@@ -17,7 +17,7 @@ test("one row per stage in pipeline order, ranked by each model alone, the reran
   const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
   expect(rows.map((r) => within(r).getByRole("rowheader").textContent)).toEqual([
     "KeywordBM25 word match", "Meaningbge\u2011small embeddings", "Hybrid50% keyword, 50% meaning",
-    "RerankerSets the orderms\u2011marco\u2011MiniLM\u2011L\u20116\u2011v2"]);
+    "RerankerSets the orderms\u2011marco\u2011MiniLM\u2011L\u20116\u2011v2 int8"]);
   expect(within(rows[1]).getByText("#2")).toBeInTheDocument(); // second by meaning
   expect(within(rows[3]).getByText("#1")).toBeInTheDocument(); // first after reranking
   expect(rows[3]).toHaveClass("decider");

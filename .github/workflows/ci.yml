@@ -276,6 +276,10 @@ jobs:
           uv run alembic upgrade head
           uv run python scripts/seed.py --profile small
           uv run python scripts/sync_index.py
+          # A settled index, as production serves: no segment merges left over from the bulk load competing for
+          # the runner's CPU while k6 measures.
+          curl -fs -X POST "localhost:9201/products/_forcemerge?max_num_segments=1" > /dev/null
+          curl -fs -X POST localhost:9201/products/_refresh > /dev/null
       - name: Start the API
         if: steps.changes.outputs.run == 'true'
         run: |

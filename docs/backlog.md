@@ -89,8 +89,8 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   vocabulary, so "wooden prayer beads" skips the model and loses its material.
 - **Search latency is the CPU reranker** (slice 6a; mostly addressed in slice 7, ADR 0021). Measured with
   bge-reranker-base over a head of 50: p95 2,110 ms on the rules path, 1,876 ms on cache hits, 3,630 ms on model
-  parses (gates 150, 180, 3,000). Slice 7 moved to ms-marco-MiniLM-L-6-v2 over a head of 5 (~27 ms of rerank on
-  the M1 Pro, ~13 ms a product on a CI runner; golden nDCG@10 0.8147 -> 0.8223). Still open: `make eval-latency` has to be re-run live once Ollama
+  parses (gates 150, 180, 3,000). Slice 7 moved to ms-marco-MiniLM-L-6-v2 (int8) over a head of 5 (~10 ms of
+  rerank on the M1 Pro; golden nDCG@10 0.8147 -> 0.8235). Still open: `make eval-latency` has to be re-run live once Ollama
   is free (the numbers in evals/results are the old setup's); caching rerank scores per (query, product content
   hash) for repeated head queries; and a latency query set written for the catalog (17 of the 80 golden dev
   queries find nothing in it).
