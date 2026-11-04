@@ -1,7 +1,7 @@
 {
   "split": "dev",
   "mode": "replay",
-  "finished": "2026-11-04 01:19 UTC",
+  "finished": "2026-11-04 02:07 UTC",
   "models": {
     "enrich": "qwen2.5:7b-instruct",
     "query": "qwen2.5:3b-instruct"
@@ -25,6 +25,36 @@
       "llm_p95_ms": 3630,
       "rules_p50_ms": 170,
       "rules_p95_ms": 2110
+    },
+    "search_mappings": {
+      "served": "products_v2",
+      "versions": {
+        "products_v1": {
+          "ndcg10": 0.8147,
+          "mrr": 0.8708,
+          "zero_result_rate": 0.0375,
+          "ndcg10_by_tier": {
+            "head": 0.9769,
+            "torso": 0.8171,
+            "tail": 0.5463
+          },
+          "bm25_ndcg10": 0.7103,
+          "hybrid_rerank_ndcg10": 0.8706,
+          "changed": []
+        },
+        "products_v2": {
+          "ndcg10": 0.8147,
+          "mrr": 0.8708,
+          "zero_result_rate": 0.0375,
+          "ndcg10_by_tier": {
+            "head": 0.9769,
+            "torso": 0.8171,
+            "tail": 0.5463
+          },
+          "bm25_ndcg10": 0.7123,
+          "hybrid_rerank_ndcg10": 0.8723
+        }
+      }
     },
     "enrichment": {
       "products": 280,
@@ -746,43 +776,13 @@
         }
       ]
     },
-    "search_mappings": {
-      "served": "products_v1",
-      "versions": {
-        "products_v1": {
-          "ndcg10": 0.8147,
-          "mrr": 0.8708,
-          "zero_result_rate": 0.0375,
-          "ndcg10_by_tier": {
-            "head": 0.9769,
-            "torso": 0.8171,
-            "tail": 0.5463
-          },
-          "bm25_ndcg10": 0.7103,
-          "hybrid_rerank_ndcg10": 0.8706
-        },
-        "products_v2": {
-          "ndcg10": 0.8147,
-          "mrr": 0.8708,
-          "zero_result_rate": 0.0375,
-          "ndcg10_by_tier": {
-            "head": 0.9769,
-            "torso": 0.8171,
-            "tail": 0.5463
-          },
-          "bm25_ndcg10": 0.7123,
-          "hybrid_rerank_ndcg10": 0.8723,
-          "changed": []
-        }
-      }
-    },
     "search": {
       "queries": 80,
       "corpus": 400,
       "ndcg10": 0.8147,
       "mrr": 0.8708,
       "zero_result_rate": 0.0375,
-      "ndcg10_over_bm25": 0.1044,
+      "ndcg10_over_bm25": 0.1024,
       "ndcg10_by_tier": {
         "head": 0.9769,
         "torso": 0.8171,
@@ -790,7 +790,7 @@
       },
       "ablation": {
         "BM25 only": {
-          "ndcg10": 0.7103,
+          "ndcg10": 0.7123,
           "mrr": 0.7509,
           "zero_result_rate": 0.1875,
           "judged": 80
@@ -808,7 +808,7 @@
           "judged": 80
         },
         "hybrid + rerank, min-max (shipped)": {
-          "ndcg10": 0.8706,
+          "ndcg10": 0.8723,
           "mrr": 0.8681,
           "zero_result_rate": 0.0,
           "judged": 80
@@ -820,7 +820,7 @@
           "judged": 80
         },
         "hybrid + rerank, min-max, BM25 floor 0": {
-          "ndcg10": 0.8706,
+          "ndcg10": 0.8723,
           "mrr": 0.8681,
           "zero_result_rate": 0.0,
           "judged": 80
@@ -832,7 +832,7 @@
           "judged": 80
         },
         "hybrid + rerank, l2": {
-          "ndcg10": 0.8706,
+          "ndcg10": 0.8723,
           "mrr": 0.8681,
           "zero_result_rate": 0.0,
           "judged": 80
@@ -844,19 +844,19 @@
           "judged": 80
         },
         "hybrid + rerank, z-score": {
-          "ndcg10": 0.8706,
+          "ndcg10": 0.8723,
           "mrr": 0.8681,
           "zero_result_rate": 0.0,
           "judged": 80
         },
         "hybrid, RRF (rank 60)": {
-          "ndcg10": 0.8754,
+          "ndcg10": 0.877,
           "mrr": 0.8828,
           "zero_result_rate": 0.0,
           "judged": 80
         },
         "hybrid + rerank, RRF (rank 60)": {
-          "ndcg10": 0.8706,
+          "ndcg10": 0.8723,
           "mrr": 0.8681,
           "zero_result_rate": 0.0,
           "judged": 80
@@ -985,7 +985,7 @@
     },
     {
       "metric": "search.ndcg10_over_bm25",
-      "value": 0.1044,
+      "value": 0.1024,
       "gate": ">= 0.08",
       "passed": true
     },

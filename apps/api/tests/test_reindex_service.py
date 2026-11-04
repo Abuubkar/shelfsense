@@ -15,11 +15,11 @@ from shelfsense_api import db, reindex
 from shelfsense_api.db import Product, Supplier
 from shelfsense_api.feeds import FeedRow, upsert_rows
 from shelfsense_api.indexing import BatchSizer, bulk_index, product_docs
-from shelfsense_api.search import ALIAS, INDEX, Filters, ensure_index, lexical_query, search
+from shelfsense_api.search import ALIAS, Filters, ensure_index, lexical_query, search
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
-TARGET = "products_v2"
+SERVED, TARGET = "products_v1", "products_v2"
 
 
 def row(n: int, title: str, color: str) -> FeedRow:
@@ -29,15 +29,18 @@ def row(n: int, title: str, color: str) -> FeedRow:
 @pytest.fixture
 async def stack(migrated_postgres_url: str, opensearch_url: str,
                 monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[tuple[AsyncOpenSearch, Any, uuid.UUID]]:
-    """Products in Postgres, indexed into products_v1 behind the alias; afterwards the alias is back on v1 and
-    this test's documents and products_v2 are gone, so other tests see the index as they left it."""
+    """Products in Postgres, indexed into products_v1 behind the alias (moved there if a fresh setup put it on
+    v2); afterwards the alias is on v1, and this test's documents and products_v2 are gone."""
     engine = create_async_engine(migrated_postgres_url)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(db, "SessionLocal", sessions)
     os = AsyncOpenSearch(hosts=[opensearch_url])
     await ensure_index(os)
-    if await os.indices.exists(index=TARGET):
-        await os.indices.delete(index=TARGET)
+    if not await os.indices.exists(index=SERVED):
+        await os.indices.create(index=SERVED)
+    actions = [{"remove": {"index": i, "alias": ALIAS}} for i in await reindex.served_indices(os) if i != SERVED]
+    await os.indices.update_aliases(body={"actions": [*actions, {"add": {"index": SERVED, "alias": ALIAS}}]})
+    await os.indices.delete(index=TARGET, ignore_unavailable=True)
     async with sessions() as session:
         supplier = Supplier(code=f"reindex-{uuid.uuid4().hex[:8]}")
         session.add(supplier)
@@ -51,9 +54,9 @@ async def stack(migrated_postgres_url: str, opensearch_url: str,
         yield os, sessions, supplier.id
         if TARGET in await reindex.served_indices(os):
             await os.indices.update_aliases(body={"actions": [{"remove": {"index": TARGET, "alias": ALIAS}},
-                                                              {"add": {"index": INDEX, "alias": ALIAS}}]})
+                                                              {"add": {"index": SERVED, "alias": ALIAS}}]})
         await os.indices.delete(index=TARGET, ignore_unavailable=True)
-        await os.delete_by_query(index=INDEX, body={"query": {"ids": {"values": [str(i) for i in ids]}}},
+        await os.delete_by_query(index=SERVED, body={"query": {"ids": {"values": [str(i) for i in ids]}}},
                                  refresh=True)
     await os.close()
     await engine.dispose()
@@ -84,7 +87,7 @@ async def test_reindex_builds_catches_up_swaps_without_failed_searches_and_rolls
         assert state["phase"] == "checked"
 
         # What v2 adds: colour synonyms at search time, title prefixes, facets by name.
-        assert await total(os, INDEX, lexical_query("gray sock")) == 0
+        assert await total(os, SERVED, lexical_query("gray sock")) == 0
         assert await total(os, TARGET, lexical_query("gray sock")) == 10
         assert await total(os, TARGET, {"match": {"title.autocomplete": "lant"}}) == 1
         assert await total(os, TARGET, {"nested": {"path": "facets", "query": {"bool": {"filter": [
@@ -115,7 +118,7 @@ async def test_reindex_builds_catches_up_swaps_without_failed_searches_and_rolls
         assert failures == []
         assert len(set(totals)) == 1  # the same complete result set before, during and after
         assert await reindex.served_indices(os) == [TARGET]
-        assert state["previous"] == [INDEX]
+        assert state["previous"] == [SERVED]
 
         with pytest.raises(reindex.ReindexError, match="kept until"):
             await reindex.drop_previous(os, session, TARGET, state)
@@ -127,6 +130,6 @@ async def test_reindex_builds_catches_up_swaps_without_failed_searches_and_rolls
                                                               Product.supplier_id == supplier_id))
         await bulk_index(os, await product_docs(session, [stool]), BatchSizer())
         await reindex.rollback(os, session, TARGET, state)
-        await os.indices.refresh(index=INDEX)
-        assert await reindex.served_indices(os) == [INDEX]
-        assert (await os.get(index=INDEX, id=str(stool)))["_source"]["title"] == "Folding camp stool"
+        await os.indices.refresh(index=SERVED)
+        assert await reindex.served_indices(os) == [SERVED]
+        assert (await os.get(index=SERVED, id=str(stool)))["_source"]["title"] == "Folding camp stool"
