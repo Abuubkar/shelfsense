@@ -41,7 +41,7 @@ COPY --from=builder --chown=shelfsense /app/.venv /app/.venv
 # on start (docs/migrations.md).
 COPY --chown=shelfsense alembic.ini /app/alembic.ini
 COPY --chown=shelfsense apps/api/migrations /app/apps/api/migrations
-# fastembed downloads its models on first use (bge-small ~130 MB; the reranker ~80 MB, API only). Mount a volume
+# fastembed downloads its models on first use (bge-small ~130 MB; the reranker ~23 MB, API only). Mount a volume
 # here to keep them across restarts; they aren't baked in (docs/backlog.md).
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 FASTEMBED_CACHE_PATH=/app/models
 RUN mkdir /app/models && chown shelfsense /app/models

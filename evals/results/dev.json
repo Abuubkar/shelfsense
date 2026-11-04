@@ -1,7 +1,7 @@
 {
   "split": "dev",
   "mode": "replay",
-  "finished": "2026-11-04 03:50 UTC",
+  "finished": "2026-11-04 04:38 UTC",
   "models": {
     "enrich": "qwen2.5:7b-instruct",
     "query": "qwen2.5:3b-instruct"
@@ -30,29 +30,42 @@
       "served": "products_v2",
       "versions": {
         "products_v1": {
-          "ndcg10": 0.8223,
+          "ndcg10": 0.8225,
           "mrr": 0.8875,
           "zero_result_rate": 0.0375,
           "ndcg10_by_tier": {
-            "head": 0.9793,
-            "torso": 0.8217,
+            "head": 0.9765,
+            "torso": 0.8252,
             "tail": 0.5672
           },
           "bm25_ndcg10": 0.7103,
-          "hybrid_rerank_ndcg10": 0.8757,
-          "changed": []
+          "hybrid_rerank_ndcg10": 0.8754,
+          "changed": [
+            {
+              "q": "backpack",
+              "tier": "head",
+              "served": 0.9497,
+              "this": 0.8918
+            },
+            {
+              "q": "water bottle",
+              "tier": "head",
+              "served": 1.0,
+              "this": 0.9838
+            }
+          ]
         },
         "products_v2": {
-          "ndcg10": 0.8223,
+          "ndcg10": 0.8235,
           "mrr": 0.8875,
           "zero_result_rate": 0.0375,
           "ndcg10_by_tier": {
-            "head": 0.9793,
-            "torso": 0.8217,
+            "head": 0.9789,
+            "torso": 0.8252,
             "tail": 0.5672
           },
           "bm25_ndcg10": 0.7123,
-          "hybrid_rerank_ndcg10": 0.8774
+          "hybrid_rerank_ndcg10": 0.878
         }
       }
     },
@@ -779,13 +792,13 @@
     "search": {
       "queries": 80,
       "corpus": 400,
-      "ndcg10": 0.8223,
+      "ndcg10": 0.8235,
       "mrr": 0.8875,
       "zero_result_rate": 0.0375,
-      "ndcg10_over_bm25": 0.11,
+      "ndcg10_over_bm25": 0.1112,
       "ndcg10_by_tier": {
-        "head": 0.9793,
-        "torso": 0.8217,
+        "head": 0.9789,
+        "torso": 0.8252,
         "tail": 0.5672
       },
       "ablation": {
@@ -808,8 +821,8 @@
           "judged": 80
         },
         "hybrid + rerank, min-max (shipped)": {
-          "ndcg10": 0.8774,
-          "mrr": 0.8593,
+          "ndcg10": 0.878,
+          "mrr": 0.8634,
           "zero_result_rate": 0.0,
           "judged": 80
         },
@@ -820,8 +833,8 @@
           "judged": 80
         },
         "hybrid + rerank, min-max, BM25 floor 0": {
-          "ndcg10": 0.8785,
-          "mrr": 0.8614,
+          "ndcg10": 0.8791,
+          "mrr": 0.8655,
           "zero_result_rate": 0.0,
           "judged": 80
         },
@@ -832,8 +845,8 @@
           "judged": 80
         },
         "hybrid + rerank, l2": {
-          "ndcg10": 0.8778,
-          "mrr": 0.8603,
+          "ndcg10": 0.8784,
+          "mrr": 0.8645,
           "zero_result_rate": 0.0,
           "judged": 80
         },
@@ -844,8 +857,8 @@
           "judged": 80
         },
         "hybrid + rerank, z-score": {
-          "ndcg10": 0.8776,
-          "mrr": 0.8603,
+          "ndcg10": 0.8782,
+          "mrr": 0.8645,
           "zero_result_rate": 0.0,
           "judged": 80
         },
@@ -856,13 +869,13 @@
           "judged": 80
         },
         "hybrid + rerank, RRF (rank 60)": {
-          "ndcg10": 0.8773,
-          "mrr": 0.8603,
+          "ndcg10": 0.8779,
+          "mrr": 0.8645,
           "zero_result_rate": 0.0,
           "judged": 80
         },
         "hybrid + rerank + parsed filters (shipped)": {
-          "ndcg10": 0.8223,
+          "ndcg10": 0.8235,
           "mrr": 0.8875,
           "zero_result_rate": 0.0375,
           "judged": 80
@@ -979,13 +992,13 @@
     },
     {
       "metric": "search.ndcg10",
-      "value": 0.8223,
+      "value": 0.8235,
       "gate": ">= 0.72",
       "passed": true
     },
     {
       "metric": "search.ndcg10_over_bm25",
-      "value": 0.11,
+      "value": 0.1112,
       "gate": ">= 0.08",
       "passed": true
     },

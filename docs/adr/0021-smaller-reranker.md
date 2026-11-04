@@ -3,10 +3,11 @@ status: accepted
 date: 2026-11-04
 ---
 
-# A smaller cross-encoder over a head of 5
+# A smaller, int8 cross-encoder over a head of 5
 
 **Chosen.** Search reranks its top 5 hybrid results (`search.HEAD_SIZE`) with `Xenova/ms-marco-MiniLM-L-6-v2`
-(`embeddings.RERANK_MODEL`, ~80 MB). Before, it reranked the top 50 with `BAAI/bge-reranker-base` (~1.1 GB).
+quantized to int8 (`embeddings.RERANK_MODEL`: the repo's `onnx/model_int8.onnx`, ~23 MB, registered as a custom
+fastembed model). Before, it reranked the top 50 with `BAAI/bge-reranker-base` (~1.1 GB).
 The rest of the result set keeps the hybrid order (ADR 0006's tail, unchanged).
 
 Measured on the M1 Pro CPU and the golden set. Rerank time is the median over 20 golden queries' texts; nDCG is
@@ -19,13 +20,22 @@ the shipped search path, replayed (evals/run.py):
 | MiniLM-L-6 | 50 | 0.8247 | 0.8875 | 294 ms |
 | MiniLM-L-6 | 20 | 0.8215 | 0.8875 | 113 ms |
 | MiniLM-L-6 | 10 | 0.8208 | 0.8875 | 54 ms |
-| **MiniLM-L-6** | **5** | **0.8223** | **0.8875** | **~27 ms** |
+| MiniLM-L-6 | 5 | 0.8223 | 0.8875 | 22.5 ms |
+| **MiniLM-L-6 int8** | **5** | **0.8235** | **0.8875** | **10.3 ms** |
+| MiniLM-L-6 int8 | 10 | 0.8231 | 0.8875 | ~21 ms |
+| MiniLM-L-6 uint8 (`model_quantized`) | 5 | 0.8248 | 0.8917 | 12.3 ms (p95 24.9) |
 
 - The fast path's gate is a p95 of 150 ms for the whole search. A head of 10 was the first choice, from M1
   numbers. CI's perf-smoke then missed at 154–187 ms p95. Its stage breakdown (`scripts/search_timings.py`)
   put reranking at a median 77 ms and p95 134 ms for 10 products on a GitHub runner, about 2.3× the Mac, while
   retrieval, tail and facets took under 10 ms each on 5,000 products. Halving the head halves the dominant
   cost, and on the golden set it scores no lower (0.8223 against 0.8208).
+- The fp32 head of 5 passed on the PR (147.7 ms) and missed on main (168.2 ms): too close to the gate. The int8
+  build of the same model halves rerank time again (p95 29 -> 13 ms for 5 products on the M1) and scores 0.8235.
+  The uint8 build scored slightly higher but its latency tail was twice as long, and the gate is a p95.
+- perf-smoke measures a settled index: CI force-merges and refreshes after the bulk load, so leftover segment
+  merges don't compete with the API for the runner's 4 vCPUs. Through the app in-process, a search costs no
+  more than calling the service directly, so the gap CI showed between the two (~44 ms) was the runner.
 - The ranking explainer in the storefront reads the head size from the API (`debug.head_size`) instead of
   hardcoding it.
 
