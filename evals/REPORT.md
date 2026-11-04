@@ -1,6 +1,6 @@
 # Shelfsense eval report (dev split)
 
-replay run, 2026-11-04 03:06 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
+replay run, 2026-11-04 03:14 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
 
 Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 
@@ -23,6 +23,8 @@ Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 | latency.rules_p95_ms | 2110 | <= 150 | **miss** |
 | latency.llm_p95_ms | 3630 | <= 3000 | **miss** |
 | latency.cache_p95_ms | 1876 | <= 180 | **miss** |
+
+Against the baseline: no drop over 1.5 points.
 
 ## Enrichment (280 products)
 
