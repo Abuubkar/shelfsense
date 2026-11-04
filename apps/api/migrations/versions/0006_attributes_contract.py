@@ -10,7 +10,7 @@ finished and no running code reads or writes attributes_json; it refuses otherwi
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
@@ -22,14 +22,16 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    missing = op.get_bind().scalar(sa.text("""
-        SELECT count(*) FROM products p
-        WHERE p.attributes_json <> '{}'::jsonb
-          AND NOT EXISTS (SELECT 1 FROM product_attributes a WHERE a.product_id = p.id)
-    """))
-    if missing:
-        raise RuntimeError(f"{missing} products have attributes not yet backfilled: "
-                           "run scripts/backfill_attributes.py before contracting")
+    # A data check, so it can't run when the SQL is only rendered (`alembic upgrade --sql`, CI's squawk lint).
+    if not context.is_offline_mode():
+        missing = op.get_bind().scalar(sa.text("""
+            SELECT count(*) FROM products p
+            WHERE p.attributes_json <> '{}'::jsonb
+              AND NOT EXISTS (SELECT 1 FROM product_attributes a WHERE a.product_id = p.id)
+        """))
+        if missing:
+            raise RuntimeError(f"{missing} products have attributes not yet backfilled: "
+                               "run scripts/backfill_attributes.py before contracting")
     # A scan, but under SHARE UPDATE EXCLUSIVE: reads and writes carry on while it checks the backfilled rows.
     op.execute("ALTER TABLE products VALIDATE CONSTRAINT products_color_base_check")
     op.execute("SET LOCAL lock_timeout = '5s'")
