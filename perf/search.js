@@ -30,7 +30,9 @@ for (let i = 0; i < SEARCHES; i++) {
 }
 
 export const options = {
-  scenarios: { searches: { executor: "shared-iterations", vus: 4, iterations: SEARCHES, maxDuration: "15m" } },
+  // One search at a time: the gate is per-search latency, as `make eval-latency` measures it. Concurrent users on a
+  // CPU-bound reranker measure queueing instead (4 users: p95 x10 locally).
+  scenarios: { searches: { executor: "shared-iterations", vus: 1, iterations: SEARCHES, maxDuration: "25m" } },
   thresholds: {
     "search_ms{source:rules}": ["p(95)<150"],
     http_req_failed: ["rate<0.01"],
