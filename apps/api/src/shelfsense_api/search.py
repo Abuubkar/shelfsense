@@ -23,7 +23,7 @@ from shelfsense_api.settings import settings
 INDEX = "products_v2"
 ALIAS = "products"
 PIPELINE = "products-hybrid"
-HEAD_SIZE = 10  # reranked per search: ~5 ms a product on the CPU (docs/adr/0021)
+HEAD_SIZE = 5  # reranked per search: ~5 ms a product on an M1 Pro, ~13 ms on a CI runner (docs/adr/0021)
 # Price facet buckets in minor units: (key, from, to), `to` exclusive.
 PRICE_BUCKETS = [("0-2500", None, 2500), ("2500-5000", 2500, 5000), ("5000-10000", 5000, 10000),
                  ("10000-20000", 10000, 20000), ("20000-", 20000, None)]
