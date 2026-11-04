@@ -93,7 +93,8 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   rerank on the M1 Pro; golden nDCG@10 0.8147 -> 0.8235). Still open: `make eval-latency` has to be re-run live once Ollama
   is free (the numbers in evals/results are the old setup's); caching rerank scores per (query, product content
   hash) for repeated head queries; and a latency query set written for the catalog (17 of the 80 golden dev
-  queries find nothing in it).
+  queries find nothing in it). Size `RERANK_THREADS` per deployment from `scripts/search_timings.py --rerank-threads`:
+  one thread won on a 4-vCPU CI runner, onnxruntime's default on an 8-core Mac (ADR 0021).
 - **Model choice: recommendation from the 6b sweep, defaults unchanged** (`evals/SWEEP.md`).
   - *Enrichment: keep qwen2.5:7b.* llama3.1:8b scored 2.1 points more leaf accuracy (0.857 vs 0.836: 9 products
     only it got right, 3 only qwen did, McNemar p = 0.15, so not shown to be better), mostly on accessories,

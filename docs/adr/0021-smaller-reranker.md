@@ -33,6 +33,11 @@ the shipped search path, replayed (evals/run.py):
 - The fp32 head of 5 passed on the PR (147.7 ms) and missed on main (168.2 ms): too close to the gate. The int8
   build of the same model halves rerank time again (p95 29 -> 13 ms for 5 products on the M1) and scores 0.8235.
   The uint8 build scored slightly higher but its latency tail was twice as long, and the gate is a p95.
+- **Reranker threads depend on the machine** (`RERANK_THREADS`). On a GitHub runner (4 vCPUs, OpenSearch alongside),
+  one onnxruntime thread gave a search p95 of 72 ms against 116 ms with onnxruntime's default, and 4 threads gave
+  112 ms: the reranker's threads contend with OpenSearch's, which run during the rerank (facets, tail). On an M1
+  Pro (8 cores) the default is fastest (rerank p95 15 ms against 37 ms with one thread). perf-smoke runs the API
+  with one thread; `scripts/search_timings.py --rerank-threads` measures a machine.
 - perf-smoke measures a settled index: CI force-merges and refreshes after the bulk load, so leftover segment
   merges don't compete with the API for the runner's 4 vCPUs. Through the app in-process, a search costs no
   more than calling the service directly, so the gap CI showed between the two (~44 ms) was the runner.
