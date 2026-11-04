@@ -27,7 +27,7 @@ from typing import Any
 
 import ollama
 from metrics import mcnemar_p
-from run import EVALS, GATES, eval_enrichment, eval_parse, load
+from run import EVALS, GATES, Candidates, eval_enrichment, eval_parse, load
 
 from shelfsense_api import db, llm, prompts, search
 from shelfsense_api.settings import settings
@@ -173,10 +173,12 @@ async def main() -> None:
 
     async with db.SessionLocal() as session:
         cassette = start("enrich")
+        # The pre-filter doesn't depend on the model: every model gets the dev run's recorded candidates.
+        candidates = Candidates(EVALS / "recordings" / "dev-candidates.json.gz", live=False)
         for model in ENRICH_MODELS:
             settings.llm_model = model
             await run_model("enrich", "enrichment", model, model, cassette,
-                            lambda c: eval_enrichment(session, products, c, "enrich" in asked))
+                            lambda c: eval_enrichment(session, products, c, "enrich" in asked, candidates))
         settings.llm_model = default_enrich
         cassette = start("parse")
         for label, model, timeout in QUERY_MODELS:

@@ -124,7 +124,8 @@ make contract-check                          # oasdiff: the code's spec vs contr
   photo). One typeface, Geist, via `next/font`.
 - Evals (ADR 0018): golden data in `evals/golden/` changes only with a reason in the commit, never to make a
   number pass. Metrics live in `evals/metrics.py`, relevance in `evals/grading.py`, both unit-tested. A prompt,
-  model or ranking change is followed by `make eval LIVE=1` and a committed recording; old recordings and results
+  model or ranking change is followed by `make eval LIVE=1` and a committed recording (with its
+  `<split>-candidates.json.gz`, the pre-filter's candidates replays reuse); old recordings and results
   are archived under `evals/archive/`, never deleted.
 - CI (ADR 0020): every PR runs `.github/workflows/ci.yml` and merges when it's green. Actions are pinned to a full
   commit SHA with the version in a comment; bump both together. A breaking contract change (OpenAPI, GraphQL, a

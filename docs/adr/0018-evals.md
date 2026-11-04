@@ -33,7 +33,9 @@ and `evals/REPORT.md`.
   options), timeouts and refusals included, with its wall time. A replay answers from the recording, and the
   metrics read model time from the recorded wall times, so a replay reports exactly the live run's numbers.
   OpenSearch and the reranker run for real in both modes, and both are deterministic. The recording
-  (`evals/recordings/<split>.jsonl.gz`) is committed, so CI can replay it without a GPU. A live run first copies
+  (`evals/recordings/<split>.jsonl.gz`) is committed, so CI can replay it without a GPU. So are the embedding
+  pre-filter's candidates per product (`<split>-candidates.json.gz`): on CI's x86 runners float differences in
+  the embeddings swapped a near-tied candidate, which changed a prompt and missed its reply (slice 7). A live run first copies
   the previous recording to `evals/archive/`.
 - **Metrics are written out** (`evals/metrics.py`, about 100 lines with unit tests) rather than taken from a
   library such as ranx or scikit-learn. Each is a few lines, and writing them pins the exact definitions the gates

@@ -197,6 +197,8 @@ jobs:
           mkdir -p build
           base="origin/$BASE_REF"; [ "${{ github.event_name }}" = push ] && base="$BEFORE"
           git show "$base:evals/results/dev.json" > build/base-results.json
+          # Remove the committed results so a crashed run can't be summarised from them.
+          rm evals/results/dev.json
           set +e
           uv run python -u evals/run.py --split dev --baseline build/base-results.json --fail-on regressions
           echo "code=$?" >> "$GITHUB_OUTPUT"
