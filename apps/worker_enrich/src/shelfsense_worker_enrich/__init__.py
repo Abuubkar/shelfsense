@@ -2,16 +2,22 @@
 the index queue, resubmits transient failures and dead-letters the rest."""
 
 import asyncio
+import time
 import uuid
 from typing import Any, Literal
 
-from shelfsense_api import aws, db
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
+from shelfsense_api import aws, db, metrics
 from shelfsense_api.classify import classify_product, needs_enrichment
 from shelfsense_api.db import Product
 from shelfsense_api.llm import TRANSIENT_CODES, ModelError
 from shelfsense_api.messages import EnrichRequest, IndexRequest, parse
 from shelfsense_api.queue import Handler, Outcome, backoff_s, dead_letter, plan_followups
 from shelfsense_api.settings import settings
+
+_tracer = trace.get_tracer(__name__)
 
 
 def make_handler(sqs: Any, llm_slots: asyncio.Semaphore) -> Handler:
@@ -51,6 +57,23 @@ async def _done(product_id: uuid.UUID) -> Outcome:
 
 async def enrich_one(product_id: uuid.UUID, attempt: int, llm_slots: asyncio.Semaphore,
                      taxonomy_version: str | None = None) -> Outcome:
+    """One product, in a span of its own under the message's consumer span: a slow or failing product stands out,
+    with its model call (and any retry) beneath it."""
+    with _tracer.start_as_current_span("enrich product", attributes={
+            "shelfsense.product_id": str(product_id), "shelfsense.attempt": attempt}) as span:
+        started = time.perf_counter()
+        outcome = await _enrich(product_id, attempt, llm_slots, taxonomy_version)
+        span.set_attribute("shelfsense.outcome", outcome.status)
+        if outcome.status != "done":
+            span.set_status(Status(StatusCode.ERROR))
+            span.set_attribute("error.type", outcome.error_code or "unknown")
+        metrics.enrich_items.add(1, {"outcome": outcome.status})
+        metrics.enrich_seconds.record(time.perf_counter() - started, {"outcome": outcome.status})
+        return outcome
+
+
+async def _enrich(product_id: uuid.UUID, attempt: int, llm_slots: asyncio.Semaphore,
+                  taxonomy_version: str | None) -> Outcome:
     async with llm_slots, db.SessionLocal() as session:
         product = await session.get(Product, product_id)
         if product is None:  # deleted since it was queued: nothing to do

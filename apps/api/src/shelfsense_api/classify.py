@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api import prompts
+from shelfsense_api import metrics, prompts
 from shelfsense_api.attributes import Grounding, ground
 from shelfsense_api.db import (
     EnrichmentRun,
@@ -121,7 +121,8 @@ async def decide(session: AsyncSession, title: str, brand: str | None, descripti
     while True:
         started = time.perf_counter()
         try:
-            reply = await chat_json(prompts.ENRICH_SYSTEM, user, category_schema(candidate_ids), follow_up)
+            reply = await chat_json(prompts.ENRICH_SYSTEM, user, category_schema(candidate_ids), follow_up,
+                                    prompt_version=decision.prompt_version)
             chosen = reply.answer.get("category_id")
             if chosen != NONE and chosen not in {str(i) for i in candidate_ids}:
                 raise ModelError("invalid_model_output", f"category_id {chosen!r} is not a candidate",
@@ -192,6 +193,9 @@ async def classify_product(session: AsyncSession, product: Product, attempt: int
     # Same transaction as the category: a crash leaves all of it or none.
     session.add(_run(product, attempt, decision.prompt_version, decision.wall_ms, reply, None, grounding))
     await session.commit()
+    for result, found in (("grounded", grounding.attributes), ("ungrounded", grounding.ungrounded),
+                          ("unnormalized", grounding.unnormalized)):
+        metrics.attributes_extracted.add(len(found), {"result": result})
     return category
 
 

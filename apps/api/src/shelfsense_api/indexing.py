@@ -13,9 +13,11 @@ from typing import Any, Literal
 
 from opensearchpy import AsyncOpenSearch, TransportError
 from opensearchpy import ConnectionError as OpenSearchConnectionError
+from opentelemetry import trace
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shelfsense_api import metrics
 from shelfsense_api.db import Product, ProductCategory, ProductExtractedAttribute, Supplier, TaxonomyNode
 from shelfsense_api.embeddings import embed_passages, product_text
 from shelfsense_api.normalize import parse_size, shoe_size_eu
@@ -25,6 +27,7 @@ from shelfsense_api.settings import settings
 
 # Retry rounds for rejected items within one call; what's still failing after them is returned as transient.
 BULK_ROUNDS = 4
+_tracer = trace.get_tracer(__name__)
 
 
 @dataclass
@@ -123,6 +126,19 @@ async def bulk_index(os: AsyncOpenSearch, docs: dict[str, dict[str, Any]], sizer
 
 async def _bulk(os: AsyncOpenSearch, batch: list[str], docs: dict[str, dict[str, Any]],
                 sizer: BatchSizer, index: str) -> dict[str, Outcome]:
+    with _tracer.start_as_current_span("opensearch bulk", attributes={
+            "db.system.name": "opensearch", "db.operation.name": "bulk", "shelfsense.batch_size": len(batch)}) as span:
+        outcomes = await _bulk_request(os, batch, docs, sizer, index)
+        rejected = {kind: sum(1 for o in outcomes.values() if o.status == kind) for kind in ("transient", "permanent")}
+        span.set_attributes({f"shelfsense.rejected.{kind}": n for kind, n in rejected.items()})
+    metrics.bulk_batch_size.record(len(batch))
+    for kind, n in rejected.items():
+        metrics.bulk_rejections.add(n, {"kind": kind})
+    return outcomes
+
+
+async def _bulk_request(os: AsyncOpenSearch, batch: list[str], docs: dict[str, dict[str, Any]],
+                        sizer: BatchSizer, index: str) -> dict[str, Outcome]:
     lines = []
     for product_id in batch:
         lines.append(json.dumps({"index": {"_index": index, "_id": product_id}}))

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from shelfsense_api import query, schemas, search, service
+from shelfsense_api import db, metrics, query, schemas, search, service, telemetry
 from shelfsense_api.db import get_session
 from shelfsense_api.graphql import graphql_router
 from shelfsense_api.schemas import ApiProblem, Problem, ProblemCode
@@ -26,6 +26,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Shelfsense", version="0.5.0", lifespan=lifespan)
 app.include_router(graphql_router, prefix="/graphql")
+# Off unless OTEL_EXPORTER_OTLP_ENDPOINT is set (docs/adr/0022); JSON logs either way.
+if telemetry.setup_telemetry("shelfsense-api", fastapi_app=app, sqlalchemy_engines=[db.engine]):
+    metrics.prime()
 
 PROBLEM_JSON = "application/problem+json"
 Session = Annotated[AsyncSession, Depends(get_session)]

@@ -17,6 +17,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 import redis.asyncio as redis
+from opentelemetry import trace
 from pydantic import BaseModel, Field, ValidationError
 
 from shelfsense_api import prompts
@@ -31,8 +32,10 @@ from shelfsense_api.normalize import (
     normalize_material,
 )
 from shelfsense_api.settings import settings
+from shelfsense_api.telemetry import fingerprint
 
 log = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 Source = Literal["rules", "cache", "llm", "degraded"]
 
@@ -136,9 +139,18 @@ def cache() -> redis.Redis:
 
 async def understand(q: str) -> QueryParse:
     """The parse of a search query. Never raises: a slow or failing model, or a cache that's down, only makes
-    the parse plainer."""
-    started = time.perf_counter()
+    the parse plainer. Traced as `understand query`, with the query as a hash: shoppers' words never leave."""
     text = " ".join(q.split())
+    with _tracer.start_as_current_span("understand query", attributes={
+            "shelfsense.query_hash": fingerprint(normalize_query(text)),
+            "shelfsense.query_words": len(text.split())}) as span:
+        parse = await _understand(text)
+        span.set_attribute("shelfsense.parse_source", parse.source)  # tail sampling keeps every degraded parse
+        return parse
+
+
+async def _understand(text: str) -> QueryParse:
+    started = time.perf_counter()
     if not needs_model(text):
         return QueryParse(source="rules", keywords=text)
 
@@ -152,10 +164,12 @@ async def understand(q: str) -> QueryParse:
         log.warning("query cache read failed: %r", exc)
 
     try:
-        reply = await chat_json(prompts.QUERY_SYSTEM, text, query_schema(), config=query_model())
+        reply = await chat_json(prompts.QUERY_SYSTEM, text, query_schema(), config=query_model(),
+                                prompt_version=prompts.QUERY_VERSION)
         parse = _from_reply(reply.answer, text)
     except (ModelError, ValidationError) as exc:
-        log.info("query parse degraded for %r: %s", text, exc)
+        # The query as a hash: shoppers' words don't go to the logs either (docs/adr/0022).
+        log.info("query parse degraded for %s: %s", fingerprint(normalize_query(text)), getattr(exc, "code", type(exc).__name__))
         return QueryParse(source="degraded", keywords=text, ms=_ms(started))
     parse.ms = _ms(started)
     if not settings.query_cache_enabled:

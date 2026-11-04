@@ -13,20 +13,24 @@ one product at a time. So one bad product never fails its batch.
 import asyncio
 import logging
 import random
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from opentelemetry import propagate, trace
+from opentelemetry.trace import Link, SpanKind, Status, StatusCode
 from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
-from shelfsense_api import aws, db
+from shelfsense_api import aws, db, metrics
 from shelfsense_api.db import DeadLetter
 from shelfsense_api.settings import settings
 
 log = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 Handler = Callable[[str, int], Awaitable[None]]
 
@@ -106,7 +110,8 @@ async def consume(sqs: Any, queue: str, handler: Handler, *, concurrency: int, s
             response = await sqs.receive_message(
                 QueueUrl=url, MaxNumberOfMessages=min(10, free), VisibilityTimeout=timeout,
                 WaitTimeSeconds=settings.queue_wait_s if wait_s is None else wait_s,
-                MessageSystemAttributeNames=["ApproximateReceiveCount"],
+                MessageSystemAttributeNames=["ApproximateReceiveCount", "SentTimestamp"],
+                MessageAttributeNames=["traceparent", "tracestate"],
             )
             for message in response.get("Messages", []):
                 task = asyncio.create_task(_process(sqs, queue, url, message, handler, timeout))
@@ -122,14 +127,34 @@ async def consume(sqs: Any, queue: str, handler: Handler, *, concurrency: int, s
 
 
 async def _process(sqs: Any, queue: str, url: str, message: dict[str, Any], handler: Handler, timeout: int) -> None:
+    """One message, in a consumer span of its own: a new trace, linked to the span that sent the message (its
+    traceparent attribute), so a product's path through the queues is a chain of linked traces."""
+    attributes = message.get("Attributes", {})
+    carrier = {k: v["StringValue"] for k, v in message.get("MessageAttributes", {}).items() if "StringValue" in v}
+    producer = trace.get_current_span(propagate.extract(carrier)).get_span_context()
+    if sent := attributes.get("SentTimestamp"):
+        metrics.queue_message_age.record(max(0.0, time.time() - int(sent) / 1000), {"queue": queue})
+    receive_count = int(attributes.get("ApproximateReceiveCount", 1))
+    with _tracer.start_as_current_span(
+            f"process {queue}", context=trace.set_span_in_context(trace.INVALID_SPAN), kind=SpanKind.CONSUMER,
+            links=[Link(producer)] if producer.is_valid else [],
+            attributes={"messaging.system": "aws_sqs", "messaging.destination.name": queue,
+                        "messaging.operation.type": "process", "messaging.message.id": message["MessageId"],
+                        "shelfsense.receive_count": receive_count}) as span:
+        await _handle(sqs, queue, url, message, handler, timeout, receive_count, span)
+
+
+async def _handle(sqs: Any, queue: str, url: str, message: dict[str, Any], handler: Handler, timeout: int,
+                  receive_count: int, span: trace.Span) -> None:
     receipt = message["ReceiptHandle"]
-    receive_count = int(message.get("Attributes", {}).get("ApproximateReceiveCount", 1))
     heartbeat = asyncio.create_task(_heartbeat(sqs, url, receipt, timeout))
     error: Exception | None = None
     try:
         await handler(message["Body"], receive_count)
     except Exception as exc:
         error = exc
+        span.set_status(Status(StatusCode.ERROR))
+        span.set_attribute("error.type", type(exc).__name__)
     finally:
         # Stop the heartbeat before acting on the message, or a late heartbeat could undo the backoff below.
         heartbeat.cancel()
