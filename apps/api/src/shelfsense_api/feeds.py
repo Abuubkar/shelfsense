@@ -16,6 +16,7 @@ from sqlalchemy import Boolean, delete, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shelfsense_api import metrics
 from shelfsense_api.db import Feed, FeedRejection, Product, ProductAttribute, Supplier
 from shelfsense_api.normalize import typed_attributes
 
@@ -188,6 +189,8 @@ async def import_file(session: AsyncSession, path: Path, feed_id: uuid.UUID, sup
             .on_conflict_do_nothing(index_elements=["feed_id", "row_number"])
         )
     await session.commit()
+    metrics.feed_rows.add(result.rows - len(result.rejections), {"outcome": "accepted"})
+    metrics.feed_rows.add(len(result.rejections), {"outcome": "rejected"})
     return result
 
 

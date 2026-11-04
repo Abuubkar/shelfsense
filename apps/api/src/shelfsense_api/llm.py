@@ -11,10 +11,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 import ollama
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
+from opentelemetry.util.types import AttributeValue
 
+from shelfsense_api import metrics
 from shelfsense_api.settings import settings
 
 # Failures that may go away by themselves: worth retrying later. The rest need a different input or prompt.
+_tracer = trace.get_tracer(__name__)
+
 TRANSIENT_CODES = frozenset({"model_timeout", "model_unavailable"})
 
 
@@ -104,13 +110,13 @@ def _call_key(config: "ModelConfig", messages: list[dict[str, str]], schema: dic
 
 
 async def chat_json(system: str, user: str, schema: dict[str, Any], follow_up: list[dict[str, str]] | None = None,
-                    config: ModelConfig | None = None) -> ModelReply:
+                    config: ModelConfig | None = None, prompt_version: str | None = None) -> ModelReply:
     """One constrained chat call (the enrichment model unless `config` says otherwise). `follow_up` continues the
     conversation after `user`, e.g. the model's rejected reply and the reason it was rejected."""
     config = config or enrich_model()
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}, *(follow_up or [])]
     if _cassette is None:
-        return await _call(config, messages, schema)
+        return await _call(config, messages, schema, prompt_version)
     key = _call_key(config, messages, schema)
     entry = _cassette.entries.get(key)
     if entry is None and _cassette.mode == "replay":
@@ -118,7 +124,7 @@ async def chat_json(system: str, user: str, schema: dict[str, Any], follow_up: l
     if entry is None:
         started = time.perf_counter()
         try:
-            entry = {"reply": asdict(await _call(config, messages, schema))}
+            entry = {"reply": asdict(await _call(config, messages, schema, prompt_version))}
         except ModelError as exc:
             entry = {"error": {"code": exc.code, "message": str(exc), "content": exc.content}}
         entry |= {"key": key, "model": config.model, "wall_ms": round((time.perf_counter() - started) * 1000)}
@@ -130,7 +136,37 @@ async def chat_json(system: str, user: str, schema: dict[str, Any], follow_up: l
     return ModelReply(**reply | {"tokens": [tuple(t) for t in reply["tokens"]]})
 
 
-async def _call(config: ModelConfig, messages: list[dict[str, str]], schema: dict[str, Any]) -> ModelReply:
+async def _call(config: ModelConfig, messages: list[dict[str, str]], schema: dict[str, Any],
+                prompt_version: str | None = None) -> ModelReply:
+    """One Ollama call in a `chat <model>` client span with GenAI semantic-convention attributes (docs/adr/0022).
+    No prompt or reply text goes on the span: only models, token counts and speed."""
+    attributes: dict[str, AttributeValue] = {
+        "gen_ai.operation.name": "chat", "gen_ai.provider.name": "ollama",
+        "gen_ai.system": "ollama",  # the attribute's name before semconv moved it to gen_ai.provider.name
+        "gen_ai.request.model": config.model, "server.address": settings.ollama_host}
+    if prompt_version:
+        attributes["shelfsense.prompt_version"] = prompt_version
+    labels = {"model": config.model}
+    with _tracer.start_as_current_span(f"chat {config.model}", kind=SpanKind.CLIENT, attributes=attributes) as span:
+        metrics.llm_inflight.add(1, labels)
+        try:
+            reply = await _ollama(config, messages, schema)
+        except ModelError as exc:
+            span.set_status(Status(StatusCode.ERROR))
+            span.set_attribute("error.type", exc.code)
+            raise
+        finally:
+            metrics.llm_inflight.add(-1, labels)
+        span.set_attributes({
+            "gen_ai.response.model": reply.model, "gen_ai.usage.input_tokens": reply.prompt_tokens,
+            "gen_ai.usage.output_tokens": reply.output_tokens,
+            "shelfsense.tokens_per_second": round(reply.output_tokens / (reply.eval_ms / 1000), 1) if reply.eval_ms else 0.0})
+        metrics.llm_tokens.add(reply.prompt_tokens, labels | {"type": "input"})
+        metrics.llm_tokens.add(reply.output_tokens, labels | {"type": "output"})
+        return reply
+
+
+async def _ollama(config: ModelConfig, messages: list[dict[str, str]], schema: dict[str, Any]) -> ModelReply:
     client = ollama.AsyncClient(host=settings.ollama_host)
     try:
         async with asyncio.timeout(config.timeout_s):

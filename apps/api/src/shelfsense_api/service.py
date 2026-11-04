@@ -3,6 +3,7 @@ twice. Errors are raised as ApiProblem."""
 
 import math
 import tempfile
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -13,11 +14,12 @@ from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 from opensearchpy import AsyncOpenSearch
+from opentelemetry import trace
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shelfsense_api import aws, cursor, feeds, query, schemas, search
+from shelfsense_api import aws, cursor, feeds, metrics, query, schemas, search
 from shelfsense_api.classify import classify_product, needs_enrichment
 from shelfsense_api.db import (
     DeadLetter,
@@ -37,6 +39,8 @@ from shelfsense_api.money import format_money
 from shelfsense_api.normalize import shoe_size_eu
 from shelfsense_api.schemas import ApiProblem, ProblemCode
 from shelfsense_api.settings import settings
+
+_tracer = trace.get_tracer(__name__)
 
 
 @contextmanager
@@ -87,7 +91,10 @@ async def commit_feed(session: AsyncSession, feed_id: uuid.UUID) -> schemas.Impo
                 with path.open("wb") as f:
                     async for chunk in obj["Body"].iter_chunks(1 << 20):
                         f.write(chunk)
-                result = await feeds.import_file(session, path, feed_id, feed.supplier_id)
+                with _tracer.start_as_current_span("import feed", attributes={"shelfsense.feed_id": str(feed_id)}) as span:
+                    result = await feeds.import_file(session, path, feed_id, feed.supplier_id)
+                    span.set_attributes({"shelfsense.rows": result.rows, "shelfsense.rejected": len(result.rejections),
+                                         "shelfsense.inserted": result.inserted, "shelfsense.updated": result.updated})
 
             enqueued = await enqueue_enrichment(session, sqs, result.product_ids, feed_id)
     return schemas.ImportResult(
@@ -272,7 +279,25 @@ async def search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filter
                       pipeline: str = search.PIPELINE) -> tuple[schemas.SearchResponse, list[str]]:
     """One search page and the cursor after each of its items (GraphQL puts one on every edge). With `parse`, the
     query text is read for filters first (query.understand). Page 1's parse travels in the cursor, so later pages
-    search exactly the same way even if the model would now answer differently, or the cache has expired."""
+    search exactly the same way even if the model would now answer differently, or the cache has expired.
+
+    Traced as `search`; a first page also counts in the search metrics by parse path (rules, cache, llm,
+    degraded, or unparsed), with whether it found anything. Later pages don't parse and cost differently."""
+    started = time.perf_counter()
+    with _tracer.start_as_current_span("search", attributes={"shelfsense.page": "next" if after else "first"}) as span:
+        response, cursors = await _search_page(session, os, q, filters, page_size, after, debug, parse, index,
+                                               pipeline)
+        path = response.query_parse.source if response.query_parse else "unparsed"
+        span.set_attributes({"shelfsense.parse_source": path, "shelfsense.total": response.total})
+        if not after:
+            metrics.search_seconds.record(time.perf_counter() - started, {"path": path})
+            metrics.searches.add(1, {"path": path, "results": "some" if response.total else "none"})
+        return response, cursors
+
+
+async def _search_page(session: AsyncSession, os: AsyncOpenSearch, q: str, filters: search.Filters, page_size: int,
+                       after: str | None, debug: bool, parse: bool, index: str,
+                       pipeline: str) -> tuple[schemas.SearchResponse, list[str]]:
     scope = {"q": " ".join(q.split()), "filters": asdict(filters), "parse": parse}
     parsed: query.QueryParse | None = None
     if parse and q.strip():

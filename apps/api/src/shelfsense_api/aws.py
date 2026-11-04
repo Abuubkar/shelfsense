@@ -9,6 +9,9 @@ from typing import Any
 import aioboto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from opentelemetry import propagate, trace
+from opentelemetry.trace import SpanKind
+from opentelemetry.util.types import AttributeValue
 
 from shelfsense_api.settings import settings
 
@@ -18,6 +21,7 @@ MAX_RECEIVE_COUNT = 5
 DLQ_RETENTION_S = 14 * 24 * 3600  # SQS's maximum
 
 _session = aioboto3.Session()
+_tracer = trace.get_tracer(__name__)
 _queue_urls: dict[tuple[str | None, str], str] = {}
 
 
@@ -66,15 +70,30 @@ async def queue_depth(sqs: Any, queue: str) -> int:
     return sum(int(attrs["Attributes"].get(n, 0)) for n in names)
 
 
+def trace_attributes() -> dict[str, dict[str, str]]:
+    """The current trace context as SQS message attributes (W3C traceparent), so the consumer can link to it.
+    The botocore instrumentation doesn't propagate through SQS itself (docs/adr/0022)."""
+    carrier: dict[str, str] = {}
+    propagate.inject(carrier)
+    return {key: {"DataType": "String", "StringValue": value} for key, value in carrier.items()}
+
+
 async def send(sqs: Any, queue: str, bodies: list[str], delay_s: int = 0) -> None:
-    """Send messages in batches of 10 (SQS's limit), failing if any entry is refused."""
+    """Send messages in batches of 10 (SQS's limit), failing if any entry is refused. Each carries the trace
+    context of a producer span, so its consumer links back here."""
     url = await queue_url(sqs, queue)
-    for start in range(0, len(bodies), 10):
-        entries = [{"Id": str(i), "MessageBody": body, "DelaySeconds": delay_s}
-                   for i, body in enumerate(bodies[start:start + 10])]
-        response = await sqs.send_message_batch(QueueUrl=url, Entries=entries)
-        if response.get("Failed"):
-            raise RuntimeError(f"SQS refused {len(response['Failed'])} messages: {response['Failed'][0]}")
+    attributes: dict[str, AttributeValue] = {"messaging.system": "aws_sqs", "messaging.destination.name": queue,
+                  "messaging.operation.type": "send", "messaging.batch.message_count": len(bodies),
+                  "shelfsense.dlq": queue.endswith("-dlq")}  # tail sampling keeps every DLQ send
+    with _tracer.start_as_current_span(f"send {queue}", kind=SpanKind.PRODUCER, attributes=attributes):
+        message_attributes = trace_attributes()
+        for start in range(0, len(bodies), 10):
+            entries = [{"Id": str(i), "MessageBody": body, "DelaySeconds": delay_s,
+                        "MessageAttributes": message_attributes}
+                       for i, body in enumerate(bodies[start:start + 10])]
+            response = await sqs.send_message_batch(QueueUrl=url, Entries=entries)
+            if response.get("Failed"):
+                raise RuntimeError(f"SQS refused {len(response['Failed'])} messages: {response['Failed'][0]}")
 
 
 async def ensure_resources(sqs: Any, s3: Any) -> None:

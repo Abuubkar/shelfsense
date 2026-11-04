@@ -13,8 +13,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from opensearchpy import AsyncOpenSearch, NotFoundError
+from opentelemetry import trace
 
-from shelfsense_api import cursor
+from shelfsense_api import cursor, embeddings
 from shelfsense_api.embeddings import embed_query, rerank
 from shelfsense_api.settings import settings
 
@@ -147,6 +148,17 @@ def template_changes(recorded: dict[str, Any], current: dict[str, Any]) -> tuple
             {k: v for k, v in new["mappings"].items() if k != "properties"}:
         changed.append("mapping options")
     return changed, sorted(set(new_fields) - set(old_fields))
+
+
+_tracer = trace.get_tracer(__name__)
+# opensearch-py has no maintained instrumentation: its calls get these manual spans (the aiohttp client spans
+# beneath them come from the aiohttp-client instrumentation).
+_OS_SPAN = {"db.system.name": "opensearch", "db.operation.name": "search"}
+
+
+async def _embed(q: str) -> list[float]:
+    with _tracer.start_as_current_span("embed query"):
+        return await asyncio.to_thread(embed_query, q)
 
 
 class SearchUnavailable(Exception):
@@ -309,7 +321,7 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
     # Independent steps overlap: the PIT is opened while the query is embedded, facets count while the page is
     # built, and the tail is fetched while the head is reranked (it needs the head's IDs, not their order).
     started = time.perf_counter()
-    embedding = asyncio.create_task(asyncio.to_thread(embed_query, q)) if q else None
+    embedding = asyncio.create_task(_embed(q)) if q else None
 
     try:
         pit = position.get("pit") or (await os.create_pit(
@@ -364,9 +376,10 @@ async def _hybrid_head(os: AsyncOpenSearch, pit: str, q: str, vector: list[float
     explain = debug and reranked
     params = {"search_pipeline": pipeline} | ({"explain": "true"} if explain else {})
     started = time.perf_counter()
-    response = await os.search(body={"size": HEAD_SIZE, "_source": _SOURCE if reranked else False,
-                                     "query": {"hybrid": hybrid},
-                                     "pit": {"id": pit, "keep_alive": settings.search_cursor_ttl}}, params=params)
+    with _tracer.start_as_current_span("opensearch hybrid", attributes=_OS_SPAN):
+        response = await os.search(body={"size": HEAD_SIZE, "_source": _SOURCE if reranked else False,
+                                         "query": {"hybrid": hybrid},
+                                         "pit": {"id": pit, "keep_alive": settings.search_cursor_ttl}}, params=params)
     timings["hybrid"] = _ms(started)
     return response["hits"]["hits"]
 
@@ -377,7 +390,9 @@ async def _order_head(raw: list[dict], q: str, reranked: bool, explain: bool, ti
         return [Hit(h["_id"], {}, "head", n) for n, h in enumerate(raw, start=1)]
 
     started = time.perf_counter()
-    rerank_scores = await asyncio.to_thread(rerank, q, [_rerank_text(h["_source"]) for h in raw]) if raw else []
+    with _tracer.start_as_current_span("rerank", attributes={"shelfsense.rerank_docs": len(raw),
+                                                             "shelfsense.rerank_model": embeddings.RERANK_MODEL}):
+        rerank_scores = await asyncio.to_thread(rerank, q, [_rerank_text(h["_source"]) for h in raw]) if raw else []
     timings["rerank"] = _ms(started)
     hits = [Hit(h["_id"], h["_source"], "head", 0,
                 {"hybrid": h["_score"], "rerank": s} | (_subquery_scores(h["_explanation"]) if explain else {}))
@@ -414,7 +429,8 @@ async def _tail(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | Non
     if after:
         body["search_after"] = after
     params = {"include_named_queries_score": "true"} if debug else {}
-    response = await os.search(body=body, params=params)
+    with _tracer.start_as_current_span("opensearch tail", attributes=_OS_SPAN):
+        response = await os.search(body=body, params=params)
     hits = []
     for n, h in enumerate(response["hits"]["hits"]):
         named = h.get("matched_queries") if isinstance(h.get("matched_queries"), dict) else {}
@@ -436,8 +452,10 @@ async def _facets(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | N
         {"key": key} | ({"from": lo} if lo is not None else {}) | ({"to": hi} if hi is not None else {})
         for key, lo, hi in PRICE_BUCKETS]}}
     started = time.perf_counter()
-    response = await os.search(body={"size": 0, "track_total_hits": True, "query": match_set(q, vector, filters),
-                                     "aggs": aggs, "pit": {"id": pit, "keep_alive": settings.search_cursor_ttl}})
+    with _tracer.start_as_current_span("opensearch facets", attributes=_OS_SPAN):
+        response = await os.search(body={
+            "size": 0, "track_total_hits": True, "query": match_set(q, vector, filters), "aggs": aggs,
+            "pit": {"id": pit, "keep_alive": settings.search_cursor_ttl}})
     timings["facets"] = _ms(started)
     facets = {name: [FacetValue(str(b["key"]), b["doc_count"]) for b in agg["buckets"] if b["doc_count"]]
               for name, agg in response["aggregations"].items()}
