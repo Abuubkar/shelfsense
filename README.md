@@ -16,6 +16,11 @@ including the models.
 > **Status: complete.** All 8 planned slices are built, tested and merged. Where it falls short of its own targets
 > is listed under [Results](#results) and [Limitations](#limitations).
 
+![The Shelfsense storefront: a search for "red rain jacket under $200" with 2,743 results, the filters read from the query shown as chips, and facets for colour, price and brand](docs/images/search.png)
+
+*"red rain jacket under $200": the colour and price were read from the query and applied as filters (the chips
+under the result count), and the facets count the whole result set, not just the first page.*
+
 ## Highlights
 
 - **The model can't make things up.** It picks a category from an enum of 15 candidates built per product, and its
@@ -72,6 +77,11 @@ to report, never to tune ([REPORT-test.md](evals/REPORT-test.md)). Model choices
 
 ## Seeing inside it
 
+One search in Jaeger: the parse came from the Redis cache, the head's hybrid retrieval and the facet counts ran
+side by side, and the rest of the page was fetched while the top 5 were reranked.
+
+![A Jaeger trace of one search: understand query (Redis), embed query, opensearch hybrid and facets in parallel, then opensearch tail alongside rerank, 81 ms in all](docs/images/trace.png)
+
 One search that needed the query model, as a trace (`uv run python scripts/trace_tree.py --search --path llm`). The
 model call is most of it; facets run alongside the head retrieval, and only the top 5 are reranked:
 
@@ -103,9 +113,14 @@ process chaos-index-…  [shelfsense-worker-index]  510.6 ms
   opensearch bulk  34.9 ms  (batch_size=48)
 ```
 
-The Grafana dashboards **Shelfsense / Pipeline** and **Shelfsense / Search** show throughput, queue and DLQ depth,
-the adaptive bulk batch size, catalog freshness, search latency by parse path and zero results. The objectives and
-their burn-rate alerts are in [docs/slo.md](docs/slo.md).
+The pipeline dashboard during two chaos runs (2,000 products each, with injected model failures and OpenSearch
+429s): products by outcome, seconds per product with exemplars that open the slowest products' traces, model calls
+in flight and tokens. The 24 dead letters are exactly the products whose replies stayed invalid after a retry.
+
+![The Grafana dashboard Shelfsense / Pipeline during chaos runs: freshness, products enriched per hour, Ollama up, DLQ depth, and enrichment panels](docs/images/dashboard.png)
+
+A second dashboard, **Shelfsense / Search**, shows latency by parse path, the parse source mix, zero results and
+per-route errors. The objectives and their burn-rate alerts are in [docs/slo.md](docs/slo.md).
 
 ## Quick start
 
@@ -184,6 +199,12 @@ flowchart TB
    under a 2.5 s limit, and degrades to keywords on any failure. The result set is keyword or semantic matches
    after filters; the top 5 by hybrid score are reranked by a cross-encoder, and the rest page in score order on
    the same snapshot.
+
+![A product page: the category path at 100% confidence, and attributes the model read from the listing with their quotes highlighted: cast iron from the title, 305 mm from "12in" in the description](docs/images/product.png)
+
+*Every attribute says where it came from. "Cast Iron" was quoted from the title and "12in" from the description;
+code checked both quotes are in the listing and converted 12 in to 305 mm. Brand and GTIN came from the
+supplier's own columns.*
 
 ### The API
 

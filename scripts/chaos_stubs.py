@@ -31,6 +31,10 @@ def model_stub(stats: Counter[str], timeout_s: float, seed: int = 3) -> FastAPI:
     app = FastAPI()
     rng = random.Random(seed)
 
+    @app.get("/api/version")
+    async def version() -> dict[str, str]:  # the enrich worker's liveness probe (metrics.OllamaUp)
+        return {"version": "chaos-stub"}
+
     @app.post("/api/chat")
     async def chat(request: Request) -> Response:
         body = await request.json()
