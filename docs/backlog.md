@@ -13,8 +13,10 @@ Improvements found and deliberately not done yet, with the suggested fix and its
 - **Semantic threshold lets in weak matches** (slice 2). At `min_score` 0.80 (cos 0.6), "something to keep drinks
   cold" also returns a laptop sleeve, ranked last by the reranker. Tune `KNN_MIN_SCORE` and `HYBRID_WEIGHTS`
   against nDCG on the slice 6 golden set; consider also dropping head items below a rerank score.
-- **Models download on the first request** (slice 2). The first search after a fresh install waits for the
-  reranker download (~1.1 GB). Warm both models at API startup, or in the Docker image build (slice 7).
+- **Models download on the first request** (slice 2; slice 7 kept them out of the images). The first search after a
+  fresh start waits for the reranker download (~1.1 GB) unless `/app/models` is a volume that already has it.
+  Options: warm both models at API startup (a slow start instead of a slow first search), or a separate model
+  image/volume populated once per release. Baking them in costs ~1.2 GB per image per architecture per merge.
 - **Every tail page re-runs the hybrid query** (slice 2). ~10–50 ms per page to recover the head's IDs, the price
   of small cursors (ADR 0006). If deep paging gets hot, cache head IDs per PIT in Redis (slice 5 brings Redis).
 - **Multi-select facets** (slice 2). Facet counts are drill-down (after all filters, including the facet's own).

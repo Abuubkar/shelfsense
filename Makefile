@@ -1,6 +1,6 @@
 TAXONOMY_URL := https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt
 
-.PHONY: taxonomy lint test test-int codegen contract-check smoke chaos web web-test golden eval eval-test eval-latency sweep
+.PHONY: taxonomy lint migrations-lint perf-smoke test test-int codegen contract-check smoke chaos web web-test golden eval eval-test eval-latency sweep
 
 # Download the official Google Product Taxonomy (with IDs) as data/taxonomy/<version>.txt plus its checksum.
 # The version comes from the file's own header. Never fetched at runtime; scripts/load_taxonomy.py reads the file.
@@ -20,6 +20,18 @@ lint:
 
 test:
 	uv run pytest -m "not integration"
+
+# squawk on the SQL of migrations added since origin/main (CI's migrations job; rules in .squawk.toml).
+migrations-lint:
+	@mkdir -p build
+	uv run python scripts/render_migrations.py --since origin/main > build/new-migrations.sql
+	@if [ -s build/new-migrations.sql ]; then uvx --from squawk-cli==2.71.0 squawk build/new-migrations.sql; fi
+
+# CI's perf-smoke (perf/search.js) against an API on BASE_URL; k6 from its image, nothing installed. From Docker on
+# a Mac the host is host.docker.internal. Keep the API's OLLAMA_HOST pointed nowhere, as in CI.
+BASE_URL ?= http://host.docker.internal:8020
+perf-smoke:
+	docker run --rm -i -v $(CURDIR):/work -w /work/perf -e BASE_URL=$(BASE_URL) grafana/k6:2.3.0 run --quiet search.js
 
 # Service tests on real Postgres, OpenSearch and Floci containers (needs Docker).
 test-int:
