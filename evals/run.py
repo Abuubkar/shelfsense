@@ -44,9 +44,10 @@ from metrics import (
     reciprocal_rank,
     score_parse,
 )
+from sqlalchemy import select
 
 from shelfsense_api import classify, db, embeddings, llm, prompts, query, search, service
-from shelfsense_api.db import Product
+from shelfsense_api.db import Product, TaxonomyNode
 from shelfsense_api.embeddings import embed_passages, embed_query, product_text
 from shelfsense_api.indexing import product_doc
 from shelfsense_api.normalize import typed_attributes
@@ -109,15 +110,52 @@ def doc_id(golden_id: str) -> str:
 # Enrichment -----------------------------------------------------------------------------------------------------
 
 
-async def eval_enrichment(session: Any, products: list[dict], cassette: llm.Cassette, live: bool) -> dict[str, Any]:
+class Candidates:
+    """The embedding pre-filter's candidates for each golden product, recorded beside a live run's model replies
+    (evals/recordings/<split>-candidates.json.gz) and used by replays instead of being recomputed. On another
+    machine, such as CI's x86 runners, float differences in the embeddings can swap a near-tied candidate, which
+    changes the prompt and misses its recorded reply; with the live run's candidates, a replay reproduces the live
+    run everywhere, candidate recall included. Missing (or a live run): computed, then saved."""
+
+    def __init__(self, path: Path, live: bool):
+        self.path, self.current = path, ""
+        self.ids: dict[str, list[int]] = {}
+        if path.exists() and not live:
+            with gzip.open(path, "rt", encoding="utf-8") as f:
+                self.ids = json.load(f)
+        self.changed = False
+        self._compute = classify.nearest_leaves
+
+    async def leaves(self, session: Any, version: str, query: list[float], k: int) -> list[TaxonomyNode]:
+        if self.current in self.ids:
+            ids = self.ids[self.current]
+            rows = {n.node_id: n for n in await session.scalars(
+                select(TaxonomyNode).where(TaxonomyNode.version == version, TaxonomyNode.node_id.in_(ids)))}
+            return [rows[i] for i in ids]
+        nodes = await self._compute(session, version, query, k)
+        self.ids[self.current], self.changed = [n.node_id for n in nodes], True
+        return nodes
+
+    def save(self) -> None:
+        if self.changed:
+            with gzip.open(self.path, "wt", encoding="utf-8") as f:
+                json.dump(dict(sorted(self.ids.items())), f)
+
+
+async def eval_enrichment(session: Any, products: list[dict], cassette: llm.Cassette, live: bool,
+                          candidates: Candidates | None = None) -> dict[str, Any]:
     per_attribute = {name: Counts() for name in prompts.ATTRIBUTE_NAMES}
     pairs: list[tuple[str | None, str]] = []
     rows = []
     extracted = ungrounded = unnormalized = 0
     output_tokens = eval_ms = 0
     started = time.perf_counter()
+    if candidates:
+        classify.nearest_leaves = candidates.leaves  # type: ignore[assignment]
     for n, p in enumerate(products, start=1):
         mark = len(cassette.calls)
+        if candidates:
+            candidates.current = p["id"]
         d = await classify.decide(session, p["title"], p["brand"], p["description"], p["attributes"])
         call_ms = sum(ms for _, ms in cassette.calls[mark:])
         paths = {str(c.node_id): c.full_path for c in d.candidates}
@@ -142,6 +180,9 @@ async def eval_enrichment(session: Any, products: list[dict], cassette: llm.Cass
         if n % 50 == 0:
             print(f"  enrichment {n}/{len(products)}", flush=True)
 
+    if candidates:
+        classify.nearest_leaves = candidates._compute  # type: ignore[assignment]
+        candidates.save()
     total = len(rows)
     seconds = sum(r["ms"] for r in rows) / 1000 / total
     confused = Counter((r["gold"], r["predicted"] or "NONE") for r in rows if r["predicted"] != r["gold"])
@@ -539,6 +580,8 @@ async def main() -> None:
         archived.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(recording, archived)
         print(f"previous recording kept as {archived.relative_to(EVALS.parent)}")
+        if "enrich" in sections and (kept := recording.with_name(f"{args.split}-candidates.json.gz")).exists():
+            shutil.copy2(kept, archived.with_name(archived.name.replace(".jsonl.gz", "-candidates.json.gz")))
         # Ask the model again for the sections being run; keep the other model's replies (a partial run).
         asked = ({settings.llm_model} if "enrich" in sections else set()) | (
             {settings.query_model} if sections & {"parse", "search"} else set())
@@ -554,7 +597,8 @@ async def main() -> None:
     async with db.SessionLocal() as session:
         try:
             if "enrich" in sections:
-                metrics["enrichment"] = await eval_enrichment(session, products, cassette, args.live)
+                candidates = Candidates(EVALS / "recordings" / f"{args.split}-candidates.json.gz", args.live)
+                metrics["enrichment"] = await eval_enrichment(session, products, cassette, args.live, candidates)
             if "parse" in sections:
                 metrics["parse"] = await eval_parse(queries, cassette)
             if "search" in sections:

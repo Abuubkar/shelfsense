@@ -56,5 +56,9 @@ def comment(head: dict[str, Any], base: dict[str, Any]) -> str:
 
 
 if __name__ == "__main__":
-    head, base = (json.loads(Path(p).read_text()) for p in sys.argv[1:3])
-    sys.stdout.write(comment(head, base))
+    head_path, base_path = Path(sys.argv[1]), Path(sys.argv[2])
+    if not head_path.exists():  # run.py stopped before writing results: say so, don't compare stale numbers
+        sys.stdout.write(f"{MARKER}\n### Offline eval (dev split, replayed)\n\n**The eval didn't finish**: see the "
+                         "eval-offline job's log.\n")
+    else:
+        sys.stdout.write(comment(json.loads(head_path.read_text()), json.loads(base_path.read_text())))
