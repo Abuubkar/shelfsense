@@ -26,6 +26,7 @@ uv run python -m shelfsense_worker_index
 uv run python scripts/upload_feed.py data/feeds/sample.csv acme-outdoor   # presign, PUT, commit -> queues
 curl -X POST "localhost:8020/v1/products/${id}:enrich"   # one product now; braces: in zsh, $id:e is a filename modifier
 uv run python scripts/sync_index.py          # full rebuild of the index from Postgres (fresh setup or repair)
+uv run python scripts/reindex.py products_v2 [--swap|--rollback|--status|--drop-previous]  # new index version, zero downtime
 curl "localhost:8020/v1/search?q=hiking%20boots&debug=true"
 curl -X POST localhost:8020/v1/admin/dlq/enrich/redrive -H 'content-type: application/json' -d '{}'  # dry run
 uv run uvicorn shelfsense_supplier_mock:app --port 8030                       # drifting supplier API
@@ -74,8 +75,11 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - Search (ADR 0006): the result set is lexical OR radial k-NN after filters; the head (50) is hybrid + rerank, the
   tail is `search_after` on the same PIT excluding the head. Every query of one search reads its PIT, and a PIT
   sort always ends with the `product_id` tiebreaker. Don't store the head in the cursor; re-run it on the PIT.
-- OpenSearch is derived data: change or remove a field by adding `products_v2` and moving the alias (slice 6).
-  Adding new fields in place is allowed (`search.NEW_FIELDS`, PUT _mapping); existing fields are never redefined.
+- OpenSearch is derived data: change or remove a field with a new index version in `search.TEMPLATES`, built and
+  swapped by `scripts/reindex.py` (ADR 0019). Adding new fields in place is allowed (`search.NEW_FIELDS`, PUT
+  _mapping, on every live version); existing fields are never redefined. No template attaches the `products`
+  alias; only `ensure_index` (fresh setup) and the reindex move it. A new version keeps answering the previous
+  version's queries the same way, since the alias can point at either during a move or rollback.
 - Query understanding goes through `query.understand` (rules fast path, Redis cache, small model under
   `QUERY_TIMEOUT_S`, degrade on any failure) and never raises. Page 1's parse travels in the cursor; never
   re-parse on later pages (ADR 0014).
@@ -121,3 +125,43 @@ make contract-check                          # oasdiff: the code's spec vs contr
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;
   the loader refuses a file whose checksum doesn't match.
+
+## Lessons from Ledgerline
+
+Ledgerline (`../ledgerline`) hit these first; the full stories are in `../ledgerline/docs/challenges.md`. Each is a
+trap nothing in this repo's config will warn about.
+
+- **An Ollama `format` schema forces the answer into the schema, even when that means null.** A field typed `string`
+  while the model writes bare numbers comes back null every time (Ledgerline lost every amount from Qwen this way).
+  Type fields the way the model writes them (`string | number`), parse numbers with `json.loads(parse_float=Decimal)`,
+  and keep the prompt's wording consistent with the schema.
+- **Check the scorer before trusting a low score.** Ledgerline's first real-data line F1 (6%) measured its scoring
+  rule, not the model. Reading the per-case failure reasons (not the averages) found that, and found the one gap
+  (no currency read) behind most real failures.
+- **Models measured on this Mac** (M1 Pro 16 GB, Ledgerline's sweep, `think: false`):
+  - gemma4:12b: best quality and tool choice (8.7 GB, ~34 s per page).
+  - qwen3.5:9b-q4_K_M: close behind, 1.6× faster, 6.6 GB.
+  - qwen2.5:7b: fast and reads well, but weakest at picking a tool action (10 of 15).
+
+  Pin explicit quant tags; a bare tag can pull different builds.
+- **OpenTelemetry Python:**
+  - The SDK and the contrib instrumentations release in matched pairs (SDK 1.45.0 with 0.66b0); a mismatched pin
+    won't resolve.
+  - An instrumentation switches itself off silently when a library is newer than it declares (0.66b0's SQLAlchemy
+    says < 2.1). Confirm its spans appear; if its hooks still fit, `instrument(skip_dep_check=True)` with a comment.
+- **Metrics over OTLP into Prometheus:**
+  - A new series' first measurement never counts in `rate()` or `increase()`, because the receiver ignores start
+    times: report counters at 0 when a process starts.
+  - A stopped process's gauges linger for 5 minutes (no staleness marker): gauge alerts and panels use
+    `last_over_time(x[1m])`.
+  - A worker process that exits without atexit hooks loses its last export: flush the providers on shutdown.
+  - A unit suffix can double: unit `{token}/s` on a metric named `…_per_second` became `…_per_second_per_second`.
+- **httpx logs every request at INFO, URL included:** set the `httpx` logger to WARNING. A management URL carrying
+  credentials reached Ledgerline's logs that way.
+- **Next.js 16:**
+  - `next lint` is gone: use the ESLint CLI with a flat config.
+  - `rewrites()` are fixed at build time, so the API address a container proxies to is a build argument.
+  - `next dev` writes `apps/web/AGENTS.md`: gitignore it.
+- **Images and pins:**
+  - GHCR packages come out public, linked to the repo; name them `<project>-<service>`.
+  - A collector-contrib release can lack its image (0.163.0 did): check the tag exists before pinning.

@@ -52,7 +52,6 @@ from shelfsense_api.settings import settings
 EVALS = Path(__file__).parent
 GOLDEN = EVALS / "golden"
 SPLITS = {"products": 280, "queries": 80}  # dev sizes; the rest is the test split
-INDEX = "evals-golden-v1"
 TOP = 50  # results scored per query (the head)
 
 # The production pipeline and the alternatives for the BM25-ties problem (docs/challenges.md): min-max maps the
@@ -232,15 +231,20 @@ def _filters_text(filters: dict[str, Any]) -> str:
 # Search ---------------------------------------------------------------------------------------------------------
 
 
-async def build_index(os: Any, products: list[dict]) -> None:
-    """A throwaway index of every golden product, mapped like products_v1, with documents built by the same
+def golden_index(mapping: str) -> str:
+    return f"evals-golden-{mapping.removeprefix('products_')}"  # products_v2 -> evals-golden-v2
+
+
+async def build_index(os: Any, products: list[dict], mapping: str) -> str:
+    """A throwaway index of every golden product, mapped like `mapping` (a search.TEMPLATES version), with
+    documents built by the same
     function the index worker uses. Facets come from the supplier columns (normalize.typed_attributes), then, as
     in production, from the extracted attributes, which here are the gold ones: like the gold categories, search
     is measured as if enrichment were perfect."""
-    template = search.INDEX_TEMPLATE["template"]
-    if await os.indices.exists(index=INDEX):
-        await os.indices.delete(index=INDEX)
-    await os.indices.create(index=INDEX, body={"settings": template["settings"], "mappings": template["mappings"]})
+    template, index = search.TEMPLATES[mapping]["template"], golden_index(mapping)
+    if await os.indices.exists(index=index):
+        await os.indices.delete(index=index)
+    await os.indices.create(index=index, body={"settings": template["settings"], "mappings": template["mappings"]})
     vectors = await asyncio.to_thread(embed_passages, [product_text(p["title"], p["brand"], p["description"])
                                                         for p in products])
     lines = []
@@ -252,10 +256,11 @@ async def build_index(os: Any, products: list[dict]) -> None:
         extracted = {k: v for k, v in p["gold"]["attributes"].items() if v != "ABSENT"}
         doc = product_doc(product, p.get("supplier", "golden"), p["gold"]["node_id"], p["gold"]["path"], extracted,
                           vector)
-        lines += [json.dumps({"index": {"_index": INDEX, "_id": doc["product_id"]}}), json.dumps(doc)]
+        lines += [json.dumps({"index": {"_index": index, "_id": doc["product_id"]}}), json.dumps(doc)]
     response = await os.bulk(body="\n".join(lines) + "\n", refresh="true")
     if response["errors"]:
         raise SystemExit(f"indexing the golden products failed: {response['items'][:3]}")
+    return index
 
 
 async def put_pipelines(os: Any) -> dict[str, str]:
@@ -287,9 +292,9 @@ def cache_rerank() -> None:
     search.rerank = cached
 
 
-async def eval_search(session: Any, corpus: list[dict], queries: list[dict]) -> dict[str, Any]:
+async def eval_search(session: Any, corpus: list[dict], queries: list[dict], mapping: str) -> dict[str, Any]:
     os = search.client()
-    await build_index(os, corpus)
+    index = await build_index(os, corpus, mapping)
     pipelines = await put_pipelines(os)
     cache_rerank()
     by_doc = {doc_id(p["id"]): p for p in corpus}
@@ -303,10 +308,10 @@ async def eval_search(session: Any, corpus: list[dict], queries: list[dict]) -> 
         text = q["q"]
         vector = await asyncio.to_thread(embed_query, text)
         for name, body in (("BM25 only", search.lexical_query(text)), ("vector only", search.semantic_query(vector))):
-            response = await os.search(index=INDEX, body={"size": TOP, "_source": False, "query": body})
+            response = await os.search(index=index, body={"size": TOP, "_source": False, "query": body})
             add(name, [h["_id"] for h in response["hits"]["hits"]])
         for name, pipeline in pipelines.items():
-            page = await search.search(os, text, search.Filters(), TOP, None, debug=True, index=INDEX,
+            page = await search.search(os, text, search.Filters(), TOP, None, debug=True, index=index,
                                        pipeline=pipeline)
             head = [h for h in page.hits if h.stage == "head"]
             tail = [h.product_id for h in page.hits if h.stage == "tail"]
@@ -314,7 +319,7 @@ async def eval_search(session: Any, corpus: list[dict], queries: list[dict]) -> 
             add(f"hybrid, {name}", [h.product_id for h in by_hybrid] + tail)
             add(f"hybrid + rerank, {name}", [h.product_id for h in page.hits])
         response, _ = await service.search_page(session, os, text, search.Filters(), TOP, None, parse=True,
-                                                index=INDEX)
+                                                index=index)
         add(shipped, [str(item.id) for item in response.items])
         if n % 20 == 0:
             print(f"  search {n}/{len(queries)}", flush=True)
@@ -342,7 +347,26 @@ async def eval_search(session: Any, corpus: list[dict], queries: list[dict]) -> 
             "zero_result_rate": best["zero_result_rate"],
             "ndcg10_over_bm25": round(best["ndcg10"] - rows["BM25 only"]["ndcg10"], 4),
             "ndcg10_by_tier": tiers, "ablation": rows,
-            "worst": sorted(per_query, key=lambda r: r["ndcg10"])[:10]}
+            "worst": sorted(per_query, key=lambda r: r["ndcg10"])[:10], "per_query": per_query}
+
+
+def compare_mappings(by_mapping: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Each index version's search numbers side by side, and the queries whose shipped-path nDCG@10 moved
+    between the served version (search.INDEX) and each other one."""
+    served = by_mapping[search.INDEX]
+    out: dict[str, Any] = {"served": search.INDEX, "versions": {}}
+    for mapping, r in by_mapping.items():
+        out["versions"][mapping] = {
+            "ndcg10": r["ndcg10"], "mrr": r["mrr"], "zero_result_rate": r["zero_result_rate"],
+            "ndcg10_by_tier": r["ndcg10_by_tier"], "bm25_ndcg10": r["ablation"]["BM25 only"]["ndcg10"],
+            "hybrid_rerank_ndcg10": r["ablation"]["hybrid + rerank, min-max (shipped)"]["ndcg10"]}
+        if mapping != search.INDEX:
+            before = {q["q"]: q["ndcg10"] for q in served["per_query"]}
+            out["versions"][mapping]["changed"] = sorted(
+                ({"q": q["q"], "tier": q["tier"], "served": before[q["q"]], "this": q["ndcg10"]}
+                 for q in r["per_query"] if q["ndcg10"] != before[q["q"]]),
+                key=lambda c: c["this"] - c["served"])
+    return out
 
 
 # Latency (live only) --------------------------------------------------------------------------------------------
@@ -460,6 +484,21 @@ def report(result: dict[str, Any]) -> str:
                   for name, r in s["ablation"].items()]
         lines += ["", "Lowest nDCG@10 (shipped configuration):", "", "| Query | Tier | nDCG@10 |", "|---|---|---:|"]
         lines += [f"| {w['q']} | {w['tier']} | {w['ndcg10']:.3f} |" for w in s["worst"]]
+    if mappings := m.get("search_mappings"):
+        lines += ["", f"## Index versions (served: `{mappings['served']}`)", "",
+                  "| Version | nDCG@10 (shipped path) | MRR | Zero results | BM25 only | Hybrid + rerank | Head / torso / tail |",
+                  "|---|---:|---:|---:|---:|---:|---|"]
+        for name, v in mappings["versions"].items():
+            tiers = " / ".join(f"{v['ndcg10_by_tier'][t]:.3f}" for t in ("head", "torso", "tail"))
+            lines.append(f"| `{name}` | {v['ndcg10']:.4f} | {v['mrr']:.4f} | {v['zero_result_rate']:.1%} | "
+                         f"{v['bm25_ndcg10']:.4f} | {v['hybrid_rerank_ndcg10']:.4f} | {tiers} |")
+        for name, v in mappings["versions"].items():
+            if "changed" in v and not v["changed"]:
+                lines += ["", f"No query's nDCG@10 moved on `{name}`."]
+            elif "changed" in v:
+                lines += ["", f"Queries whose nDCG@10 moved on `{name}` ({len(v['changed'])}):", "",
+                          f"| Query | Tier | `{mappings['served']}` | `{name}` |", "|---|---|---:|---:|"]
+                lines += [f"| {c['q']} | {c['tier']} | {c['served']:.3f} | {c['this']:.3f} |" for c in v["changed"]]
     if lat := m.get("latency"):
         lines += ["", f"## Search latency ({lat['searches']} searches on the catalog, live)", "",
                   "| Parse path | Searches | p50 ms | p95 ms |", "|---|---:|---:|---:|"]
@@ -508,7 +547,10 @@ async def main() -> None:
             if "parse" in sections:
                 metrics["parse"] = await eval_parse(queries, cassette)
             if "search" in sections:
-                metrics["search"] = await eval_search(session, corpus, queries)
+                # Every index version is measured; gates and the baseline read the served one.
+                by_mapping = {m: await eval_search(session, corpus, queries, m) for m in search.TEMPLATES}
+                metrics["search_mappings"] = compare_mappings(by_mapping)
+                metrics["search"] = {k: v for k, v in by_mapping[search.INDEX].items() if k != "per_query"}
         finally:
             if args.live and sections & {"enrich", "parse", "search"}:  # a latency-only run records nothing
                 cassette.save()

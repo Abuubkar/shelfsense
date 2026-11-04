@@ -52,6 +52,24 @@ The served release is `TAXONOMY_VERSION`; releases load side by side, keyed by v
 **Rollback.** Switch `TAXONOMY_VERSION` back and run `--reindex` again: both releases' categories stay in
 `product_categories`, and the reindex follows whichever release is served. Rehearsed after the upgrade.
 
+## C. Search index version: products_v1 to products_v2 (no schema change)
+
+A new mapping ships as a new index beside the served one; the `products` alias moves in one atomic request
+(docs/adr/0019). `scripts/reindex.py products_v2` runs every step but the swap; each is resumable.
+
+| Step | What | Measured (dev, 299,545 products) |
+|---|---|---|
+| 1 | `make eval`: the search eval runs on every version (REPORT.md, "Index versions") | v1 and v2 nDCG@10 0.8147, no query moved |
+| 2 | build v2 from Postgres, refresh off, position saved per 2,000 products | 2,020 s (~8,900 products/min, embedding-bound) |
+| 3 | catch-up: products changed since the build started, minus 10 min | 0 (no writes during the run) |
+| 4 | checks: doc count = Postgres, 50-title parity sample against the served index | 299,545 = 299,545; 50 of 50 |
+| 5 | `--swap`: last catch-up, alias moved (remove v1 + add v2, one request), catch-up through the alias | integration test: 0 failed searches |
+| 6 | `--drop-previous` after 24 h (refused before, or while v1 serves) | |
+
+**Rollback.** `--rollback` catches v1 up on everything changed since the swap, moves the alias back, and catches
+up again for writes during the move. Don't run a taxonomy upgrade (B) during a reindex: its remaps aren't among
+the catch-up signals.
+
 ## Gated cutover
 
 A deploy switches traffic only after the new process answers health requests (3 × HTTP 200 in a row). The first
