@@ -369,3 +369,47 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 - **What we did.** Reported as measured. Quality metrics repeated exactly between runs (qwen2.5:7b enrichment and
   the 3B's parses); anything that depends on a time limit carries a few points of run-to-run noise.
 
+
+## Slice 6c
+
+### A long reindex session served stale rows to its own catch-up
+
+- **Problem.** `product_docs` reads `Product` rows through the session, and sessions don't expire on commit. In
+  one long reindex session, a catch-up pass got the version of a row the build had loaded, not the one a feed
+  had just updated, so the parity check found v1 one product ahead of v2. The same session also kept every row
+  it had read: the whole catalog in memory by the end of a build.
+- **What we did.** `reindex._index` expunges the session after reading each chunk. The integration test changes
+  a product after the build and checks that the catch-up carries the new title.
+
+### The served index was a sliver of Postgres
+
+- **Problem.** The first build of products_v2 on the dev stack indexed 299,545 products: Postgres still holds
+  slice 4's rehearsal seed, while products_v1 had only ever been filled with 8,064 of them. A reindex rebuilds
+  from Postgres, as it should, so v2 and v1 differ by far more than their mappings, and the parity check compares
+  two corpora.
+- **What we did.** Reported it rather than shrinking the build to match v1. The doc-count check is what caught
+  it: v1's count against Postgres is part of the check output.
+
+### nested fields inflate `_cat/indices` counts
+
+- **Problem.** `_cat/indices` showed 404,238 documents in products_v2 when ~100,000 products were in: each nested
+  facet entry is a hidden Lucene document. `_count` (top-level documents) read 0, because refresh is off during
+  the build.
+- **What we did.** The checks count with `_count` after turning refresh back on.
+
+### `now()` stood still for the whole reindex
+
+- **Problem.** Postgres's `now()` is the start of the current transaction, and the reindex session sits in one
+  read transaction from the build to the swap. On the catalog run, every catch-up mark equalled the build's
+  start, so each pass would reindex everything since then; the swap time, and with it the 24-hour keep, would
+  have been the build's start too.
+- **What we did.** `reindex.db_now` reads `statement_timestamp()`.
+
+### Parity by known item fails on repeated titles
+
+- **Problem.** On the catalog, "TRAIL TRAIL RUNNING SHOE" is the title of 152 seeded products. In v2 (299,545
+  products) the sampled one scored 20.21 against 20.23 for the top 10, all identical listings, so it fell out of
+  its own top 10 and failed the check. Which of identical listings wins turns on the second decimal.
+- **What we did.** A parity query passes when its exact title is in the top 10, its own product or not. 50 of 50
+  passed.
+

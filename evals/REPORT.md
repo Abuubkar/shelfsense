@@ -1,6 +1,6 @@
 # Shelfsense eval report (dev split)
 
-live run, 2026-11-03 17:47 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
+replay run, 2026-11-04 01:19 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
 
 Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 
@@ -180,6 +180,15 @@ Lowest nDCG@10 (shipped configuration):
 | bag to carry a laptop and books | tail | 0.253 |
 | mens hiking boots size 10 | torso | 0.471 |
 | teliscope | tail | 0.493 |
+
+## Index versions (served: `products_v1`)
+
+| Version | nDCG@10 (shipped path) | MRR | Zero results | BM25 only | Hybrid + rerank | Head / torso / tail |
+|---|---:|---:|---:|---:|---:|---|
+| `products_v1` | 0.8147 | 0.8708 | 3.8% | 0.7103 | 0.8706 | 0.977 / 0.817 / 0.546 |
+| `products_v2` | 0.8147 | 0.8708 | 3.8% | 0.7123 | 0.8723 | 0.977 / 0.817 / 0.546 |
+
+No query's nDCG@10 moved on `products_v2`.
 
 ## Search latency (1000 searches on the catalog, live)
 

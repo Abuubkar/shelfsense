@@ -18,7 +18,7 @@ from shelfsense_api import cursor
 from shelfsense_api.embeddings import embed_query, rerank
 from shelfsense_api.settings import settings
 
-INDEX = "products_v1"
+INDEX = "products_v1"  # what a fresh setup creates and puts the alias on; scripts/reindex.py moves the alias
 ALIAS = "products"
 PIPELINE = "products-hybrid"
 HEAD_SIZE = 50
@@ -29,7 +29,7 @@ FACET_SIZE = 20
 _SOURCE = {"excludes": ["embedding"]}
 TAIL_SORT = [{"_score": "desc"}, {"product_id": "asc"}]  # with a PIT, search_after needs an explicit tiebreaker
 
-# Added to products_v1 in place (slice 5a): adding fields never changes how existing ones are indexed. Changing
+# Added to products_v1 in place (slice 5a, 6c): adding fields never changes how existing ones are indexed. Changing
 # or removing a field still means a new index version and an alias move.
 NEW_FIELDS = {
     "gender": {"type": "keyword"},
@@ -37,37 +37,99 @@ NEW_FIELDS = {
     "size_system": {"type": "keyword"},
     # Shoe sizes in EU numbers (normalize.shoe_size_eu), so "size 8" finds a boot listed as "EU 39.5".
     "size_eu": {"type": "float"},
+    # Every facet value as a (name, value) pair, so a facet can be aggregated or filtered by name without a new
+    # field per attribute. Part of products_v2; added to v1 too, so one document fits whichever index the alias
+    # points at during a reindex (both are "dynamic": "strict").
+    "facets": {"type": "nested", "properties": {"name": {"type": "keyword"}, "value": {"type": "keyword"}}},
 }
 
-INDEX_TEMPLATE = {
-    "index_patterns": [INDEX],
-    "template": {
-        "settings": {"index": {"knn": True, "number_of_shards": 1, "number_of_replicas": 0}},
-        "mappings": {
-            "dynamic": "strict",
-            "properties": {
-                "product_id": {"type": "keyword"},
-                "supplier": {"type": "keyword"},
-                "supplier_sku": {"type": "keyword"},
-                "title": {"type": "text", "analyzer": "english"},
-                "description": {"type": "text", "analyzer": "english"},
-                "brand": {"type": "keyword", "fields": {"text": {"type": "text"}}},
-                "gtin": {"type": "keyword"},
-                "price_minor": {"type": "long"},
-                "currency": {"type": "keyword"},
-                # Base palette colour (normalize.BASE_COLORS), from the supplier's column or the listing's text.
-                "color": {"type": "keyword", "normalizer": "lowercase"},
-                "size": {"type": "keyword"},
-                **NEW_FIELDS,
-                "category_id": {"type": "integer"},
-                "category_path": {"type": "text", "analyzer": "english"},
-                "updated_at": {"type": "date"},
-                "embedding": {"type": "knn_vector", "dimension": 384, "space_type": "cosinesimil",
-                              "method": {"name": "hnsw", "engine": "faiss"}},
-            },
-        },
-        "aliases": {ALIAS: {}},
+_V1_PROPERTIES = {
+    "product_id": {"type": "keyword"},
+    "supplier": {"type": "keyword"},
+    "supplier_sku": {"type": "keyword"},
+    "title": {"type": "text", "analyzer": "english"},
+    "description": {"type": "text", "analyzer": "english"},
+    "brand": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+    "gtin": {"type": "keyword"},
+    "price_minor": {"type": "long"},
+    "currency": {"type": "keyword"},
+    # Base palette colour (normalize.BASE_COLORS), from the supplier's column or the listing's text.
+    "color": {"type": "keyword", "normalizer": "lowercase"},
+    "size": {"type": "keyword"},
+    **NEW_FIELDS,
+    "category_id": {"type": "integer"},
+    "category_path": {"type": "text", "analyzer": "english"},
+    "updated_at": {"type": "date"},
+    "embedding": {"type": "knn_vector", "dimension": 384, "space_type": "cosinesimil",
+                  "method": {"name": "hnsw", "engine": "faiss"}},
+}
+
+# Search-time synonyms for colour and material words (products_v2). Spelling variants are equivalent; a base
+# colour or material also finds its named shades and kinds, but not the reverse ("red" finds a burgundy bag,
+# "burgundy" doesn't find every red one). Taken from normalize's vocabulary, leaving out abbreviations and words
+# that mostly mean something else ("steel", "wine", "rose", "lime", "walnut", "down", "iron", "print").
+SYNONYMS = [
+    "grey, gray",
+    "aluminium, aluminum",
+    "polyamide, nylon",
+    "stainless steel, stainless",
+    "black => black, onyx",
+    "white => white, ivory, cream, off white",
+    "gray => gray, grey, charcoal, graphite",
+    "beige => beige, khaki",
+    "red => red, burgundy, maroon, crimson",
+    "pink => pink, fuchsia, blush",
+    "yellow => yellow, mustard",
+    "green => green, olive, sage",
+    "blue => blue, navy, teal, cobalt, turquoise",
+    "purple => purple, violet, lavender",
+    "wool => wool, merino",
+]
+
+_V2_ANALYSIS = {
+    "filter": {
+        # The built-in english analyzer, rebuilt so synonyms can go into it (OpenSearch docs: English analyzer).
+        "english_possessive_stemmer": {"type": "stemmer", "language": "possessive_english"},
+        "english_stop": {"type": "stop", "stopwords": "_english_"},
+        "english_keywords": {"type": "keyword_marker", "keywords": []},
+        "english_stemmer": {"type": "stemmer", "language": "english"},
+        # Search time only: at index time a multi-word synonym would shift later token positions. After the stop
+        # filter (a stop filter after it breaks the graph), before stemming so stemming treats both sides alike.
+        "color_material_synonyms": {"type": "synonym_graph", "synonyms": SYNONYMS, "lenient": True},
+        "autocomplete_edge": {"type": "edge_ngram", "min_gram": 2, "max_gram": 15},
     },
+    "analyzer": {
+        "english_synonyms": {"type": "custom", "tokenizer": "standard", "filter": [
+            "english_possessive_stemmer", "lowercase", "english_stop", "color_material_synonyms",
+            "english_keywords", "english_stemmer"]},
+        "autocomplete_index": {"type": "custom", "tokenizer": "standard", "filter": ["lowercase", "autocomplete_edge"]},
+        "autocomplete_search": {"type": "custom", "tokenizer": "standard", "filter": ["lowercase"]},
+    },
+}
+
+
+def _with_synonyms(field: dict[str, Any]) -> dict[str, Any]:
+    return field | {"search_analyzer": "english_synonyms"}
+
+
+_V2_PROPERTIES = _V1_PROPERTIES | {
+    # Prefixes of title words ("hik" -> hiking), for an autocomplete box: indexed as edge n-grams, searched whole.
+    "title": _with_synonyms(_V1_PROPERTIES["title"]) | {"fields": {"autocomplete": {
+        "type": "text", "analyzer": "autocomplete_index", "search_analyzer": "autocomplete_search"}}},
+    "description": _with_synonyms(_V1_PROPERTIES["description"]),
+    "category_path": _with_synonyms(_V1_PROPERTIES["category_path"]),
+}
+
+_SETTINGS = {"knn": True, "number_of_shards": 1, "number_of_replicas": 0}
+
+# One template per index version. No template attaches the alias: a new version must not take searches before
+# it is built and checked, so the alias is only ever moved by ensure_index (fresh setup) or scripts/reindex.py.
+TEMPLATES = {
+    "products_v1": {"index_patterns": ["products_v1"], "template": {
+        "settings": {"index": _SETTINGS}, "mappings": {"dynamic": "strict", "properties": _V1_PROPERTIES}}},
+    "products_v2": {"index_patterns": ["products_v2"], "template": {
+        "settings": {"index": _SETTINGS, "analysis": _V2_ANALYSIS},
+        "mappings": {"dynamic": "strict", "properties": _V2_PROPERTIES}}},
 }
 
 
@@ -105,13 +167,18 @@ def pipeline_body(normalization: dict[str, Any] | None = None) -> dict[str, Any]
 
 
 async def ensure_index(os: AsyncOpenSearch) -> None:
-    """The search pipeline, the index template, and the first index (which joins the alias from the template)."""
+    """The search pipeline and every version's template; then either the in-place field additions on whatever
+    index the alias points at, or, on a fresh setup, the first index with the alias on it."""
     await os.search_pipeline.put(id=PIPELINE, body=pipeline_body())
-    await os.indices.put_index_template(name=INDEX, body=INDEX_TEMPLATE)
-    if not await os.indices.exists(index=INDEX):
-        await os.indices.create(index=INDEX)
-    else:
+    for name, template in TEMPLATES.items():
+        await os.indices.put_index_template(name=name, body=template)
+    if await os.indices.exists_alias(name=ALIAS):
+        await os.indices.put_mapping(index=ALIAS, body={"properties": NEW_FIELDS})
+    elif await os.indices.exists(index=INDEX):  # created by a version whose template still carried the alias
         await os.indices.put_mapping(index=INDEX, body={"properties": NEW_FIELDS})
+        await os.indices.put_alias(index=INDEX, name=ALIAS)
+    else:
+        await os.indices.create(index=INDEX, body={"aliases": {ALIAS: {}}})
 
 
 @dataclass(frozen=True)

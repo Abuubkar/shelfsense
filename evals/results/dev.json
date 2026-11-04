@@ -1,7 +1,7 @@
 {
   "split": "dev",
-  "mode": "live",
-  "finished": "2026-11-03 17:47 UTC",
+  "mode": "replay",
+  "finished": "2026-11-04 01:19 UTC",
   "models": {
     "enrich": "qwen2.5:7b-instruct",
     "query": "qwen2.5:3b-instruct"
@@ -12,6 +12,20 @@
   },
   "taxonomy": "2021-09-21",
   "metrics": {
+    "latency": {
+      "searches": 1000,
+      "counts": {
+        "cache": 313,
+        "llm": 38,
+        "rules": 649
+      },
+      "cache_p50_ms": 510,
+      "cache_p95_ms": 1876,
+      "llm_p50_ms": 2230,
+      "llm_p95_ms": 3630,
+      "rules_p50_ms": 170,
+      "rules_p95_ms": 2110
+    },
     "enrichment": {
       "products": 280,
       "candidate_recall": 0.9,
@@ -77,6 +91,54 @@
         "non_english": 0.3077,
         "rendered": 0.8821
       },
+      "wrong_leaf": [
+        "g-019",
+        "g-029",
+        "g-030",
+        "g-031",
+        "g-037",
+        "g-038",
+        "g-043",
+        "g-065",
+        "g-097",
+        "g-100",
+        "g-105",
+        "g-140",
+        "g-146",
+        "g-159",
+        "g-169",
+        "g-172",
+        "g-176",
+        "g-184",
+        "g-190",
+        "g-193",
+        "g-243",
+        "g-249",
+        "g-252",
+        "g-255",
+        "g-285",
+        "h-009",
+        "h-014",
+        "h-019",
+        "h-020",
+        "h-028",
+        "h-032",
+        "h-035",
+        "h-041",
+        "h-044",
+        "h-046",
+        "h-048",
+        "h-061",
+        "h-086",
+        "h-087",
+        "h-088",
+        "h-089",
+        "h-090",
+        "h-093",
+        "h-095",
+        "h-096",
+        "h-100"
+      ],
       "confusion_depth2": [
         [
           "Hardware > Tools",
@@ -684,6 +746,36 @@
         }
       ]
     },
+    "search_mappings": {
+      "served": "products_v1",
+      "versions": {
+        "products_v1": {
+          "ndcg10": 0.8147,
+          "mrr": 0.8708,
+          "zero_result_rate": 0.0375,
+          "ndcg10_by_tier": {
+            "head": 0.9769,
+            "torso": 0.8171,
+            "tail": 0.5463
+          },
+          "bm25_ndcg10": 0.7103,
+          "hybrid_rerank_ndcg10": 0.8706
+        },
+        "products_v2": {
+          "ndcg10": 0.8147,
+          "mrr": 0.8708,
+          "zero_result_rate": 0.0375,
+          "ndcg10_by_tier": {
+            "head": 0.9769,
+            "torso": 0.8171,
+            "tail": 0.5463
+          },
+          "bm25_ndcg10": 0.7123,
+          "hybrid_rerank_ndcg10": 0.8723,
+          "changed": []
+        }
+      }
+    },
     "search": {
       "queries": 80,
       "corpus": 400,
@@ -828,20 +920,6 @@
           "ndcg10": 0.4935
         }
       ]
-    },
-    "latency": {
-      "searches": 1000,
-      "counts": {
-        "cache": 313,
-        "llm": 38,
-        "rules": 649
-      },
-      "cache_p50_ms": 510,
-      "cache_p95_ms": 1876,
-      "llm_p50_ms": 2230,
-      "llm_p95_ms": 3630,
-      "rules_p50_ms": 170,
-      "rules_p95_ms": 2110
     }
   },
   "gates": [

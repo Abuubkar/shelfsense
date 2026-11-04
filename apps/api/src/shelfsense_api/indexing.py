@@ -89,13 +89,16 @@ def _facets(p: Product, extracted: dict[str, str]) -> dict[str, Any]:
         parsed = parse_size(extracted["size"]) if extracted.get("size") else None
         system, size = parsed if parsed else (None, None)
     eu = shoe_size_eu(system, size, gender) if system and system != "alpha" and size else None
-    return {"color": p.color_base or extracted.get("color"), "material": p.material or extracted.get("material"),
-            "gender": gender, "size": size, "size_system": system, "size_eu": float(eu) if eu is not None else None}
+    values = {"color": p.color_base or extracted.get("color"), "material": p.material or extracted.get("material"),
+              "gender": gender, "size": size}
+    return values | {"size_system": system, "size_eu": float(eu) if eu is not None else None,
+                     "facets": [{"name": k, "value": v} for k, v in ({"brand": p.brand} | values).items() if v]}
 
 
-async def bulk_index(os: AsyncOpenSearch, docs: dict[str, dict[str, Any]], sizer: BatchSizer) -> list[Outcome]:
-    """Index `docs` (product ID -> document) through the `products` alias, in batches of `sizer.size`, adapting
-    the size as OpenSearch accepts or rejects them. Returns one outcome per product: done, transient (still
+async def bulk_index(os: AsyncOpenSearch, docs: dict[str, dict[str, Any]], sizer: BatchSizer,
+                     index: str = ALIAS) -> list[Outcome]:
+    """Index `docs` (product ID -> document) through the `products` alias (or into `index`, for a reindex), in
+    batches of `sizer.size`, adapting the size as OpenSearch accepts or rejects them. Returns one outcome per product: done, transient (still
     rejected or failing after BULK_ROUNDS) or permanent (refused as malformed)."""
     outcomes: dict[str, Outcome] = {}
     pending = dict(docs)
@@ -108,7 +111,7 @@ async def bulk_index(os: AsyncOpenSearch, docs: dict[str, dict[str, Any]], sizer
         while start < len(ids):
             batch = ids[start:start + sizer.size]
             start += len(batch)
-            for product_id, outcome in (await _bulk(os, batch, pending, sizer)).items():
+            for product_id, outcome in (await _bulk(os, batch, pending, sizer, index)).items():
                 if outcome.status == "transient":
                     retry[product_id] = pending[product_id]
                 outcomes[product_id] = outcome
@@ -117,10 +120,10 @@ async def bulk_index(os: AsyncOpenSearch, docs: dict[str, dict[str, Any]], sizer
 
 
 async def _bulk(os: AsyncOpenSearch, batch: list[str], docs: dict[str, dict[str, Any]],
-                sizer: BatchSizer) -> dict[str, Outcome]:
+                sizer: BatchSizer, index: str) -> dict[str, Outcome]:
     lines = []
     for product_id in batch:
-        lines.append(json.dumps({"index": {"_index": ALIAS, "_id": product_id}}))
+        lines.append(json.dumps({"index": {"_index": index, "_id": product_id}}))
         lines.append(json.dumps(docs[product_id]))
     try:
         response = await os.bulk(body="\n".join(lines) + "\n")
