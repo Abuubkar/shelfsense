@@ -110,3 +110,12 @@ Improvements found and deliberately not done yet, with the suggested fix and its
     run's searches were cache hits), keeping the 3B for the live path.
   - *Not run: qwen2.5:14b.* ~9 GB of 4-bit weights against ~7 GB free on this 16 GB Mac with the containers up.
     Worth a run on a 32 GB machine or a GPU host before slice 7 sizes production.
+- **Open PITs cap search throughput** (found by slice 7's perf-smoke). Every first-page search that has more pages
+  opens a point-in-time and keeps it 5 minutes (ADR 0006); OpenSearch allows 300 open PITs per node by default, so
+  past ~300 such searches in 5 minutes on one node, new searches fail with 429 ("Trying to create too many Point
+  In Time contexts"). ADR 0006 assumed 300 was enough; a 500-search CI run plus 120 more crossed it. Options:
+  open the PIT only when page 2 is asked for, re-running page 1 on it and checking the head matches (keeps the
+  snapshot guarantee for page 2 onwards); a shorter keep-alive (1 minute between pages); raising
+  `search.max_open_pit_context` with heap to match; or delete PITs of searches nobody pages. Needs a decision on
+  ADR 0006's guarantee and a load test.
+
