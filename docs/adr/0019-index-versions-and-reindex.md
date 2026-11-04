@@ -65,4 +65,4 @@ v1 keeps serving, and moves the alias in one `_aliases` request. v1 is kept for 
 - Synonyms only widen matches, which is what the parity check assumes. A rule that narrowed them would fail it.
 - On the golden set, v2's nDCG@10 equals v1's (0.8147) on the shipped path, and no query moved: the golden
   listings rarely use a shade where a query uses the base colour. The synonyms are kept because they fix real
-  misses ("gray" against "grey") without costing a point. Swapping is a separate decision.
+  misses ("gray" against "grey") without costing a point. Swapped on the dev stack 2026-11-04 with 0 failed requests across the move; `search.INDEX` is products_v2 from then on.

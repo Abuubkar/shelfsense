@@ -18,7 +18,9 @@ from shelfsense_api import cursor
 from shelfsense_api.embeddings import embed_query, rerank
 from shelfsense_api.settings import settings
 
-INDEX = "products_v1"  # what a fresh setup creates and puts the alias on; scripts/reindex.py moves the alias
+# What a fresh setup creates and puts the alias on, and what the eval gates read: the served version. v2 since
+# 2026-11-04 (docs/migrations.md C); scripts/reindex.py moves the alias on existing setups.
+INDEX = "products_v2"
 ALIAS = "products"
 PIPELINE = "products-hybrid"
 HEAD_SIZE = 50

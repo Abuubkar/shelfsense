@@ -63,8 +63,8 @@ A new mapping ships as a new index beside the served one; the `products` alias m
 | 2 | build v2 from Postgres, refresh off, position saved per 2,000 products | 2,020 s (~8,900 products/min, embedding-bound) |
 | 3 | catch-up: products changed since the build started, minus 10 min | 0 (no writes during the run) |
 | 4 | checks: doc count = Postgres, 50-title parity sample against the served index | 299,545 = 299,545; 50 of 50 |
-| 5 | `--swap`: last catch-up, alias moved (remove v1 + add v2, one request), catch-up through the alias | integration test: 0 failed searches |
-| 6 | `--drop-previous` after 24 h (refused before, or while v1 serves) | |
+| 5 | `--swap`: last catch-up, alias moved (remove v1 + add v2, one request), catch-up through the alias | 2026-11-04 02:01:45 UTC; catch-ups 0 and 0; `search_loop.py` across it: 60 requests over 63 s (search, products, product, GraphQL), 0 errors |
+| 6 | `--drop-previous` after 24 h (refused before, or while v1 serves) | v1 kept until 2026-11-05 02:01 UTC |
 
 **Rollback.** `--rollback` catches v1 up on everything changed since the swap, moves the alias back, and catches
 up again for writes during the move. Don't run a taxonomy upgrade (B) during a reindex: its remaps aren't among
