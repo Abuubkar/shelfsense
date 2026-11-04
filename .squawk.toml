@@ -1,0 +1,9 @@
+# squawk lints the SQL of migrations a branch adds (CI's migrations job; scripts/render_migrations.py --since).
+# Kept: the rules that enforce docs/migrations.md (lock_timeout before DDL, NOT VALID constraints, concurrent
+# indexes, no blocking rewrites). Left out, as house style rather than safety:
+#   prefer-text-field        String columns are varchar here; a new column's type isn't a lock problem
+#   prefer-bigint-over-int   counts and minor-unit amounts are sized per column (money is BIGINT, ADR 0003)
+#   require-statement-timeout  migrations set lock_timeout (docs/migrations.md); a long VALIDATE is expected
+excluded_rules = ["prefer-text-field", "prefer-bigint-over-int", "require-statement-timeout"]
+# The rendered SQL carries Alembic's own BEGIN/COMMIT, so squawk sees the transaction itself.
+pg_version = "18.0"

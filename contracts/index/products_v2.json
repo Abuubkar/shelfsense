@@ -1,0 +1,187 @@
+{
+  "index_patterns": [
+    "products_v2"
+  ],
+  "template": {
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "brand": {
+          "fields": {
+            "text": {
+              "type": "text"
+            }
+          },
+          "type": "keyword"
+        },
+        "category_id": {
+          "type": "integer"
+        },
+        "category_path": {
+          "analyzer": "english",
+          "search_analyzer": "english_synonyms",
+          "type": "text"
+        },
+        "color": {
+          "normalizer": "lowercase",
+          "type": "keyword"
+        },
+        "currency": {
+          "type": "keyword"
+        },
+        "description": {
+          "analyzer": "english",
+          "search_analyzer": "english_synonyms",
+          "type": "text"
+        },
+        "embedding": {
+          "dimension": 384,
+          "method": {
+            "engine": "faiss",
+            "name": "hnsw"
+          },
+          "space_type": "cosinesimil",
+          "type": "knn_vector"
+        },
+        "facets": {
+          "properties": {
+            "name": {
+              "type": "keyword"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          },
+          "type": "nested"
+        },
+        "gender": {
+          "type": "keyword"
+        },
+        "gtin": {
+          "type": "keyword"
+        },
+        "material": {
+          "type": "keyword"
+        },
+        "price_minor": {
+          "type": "long"
+        },
+        "product_id": {
+          "type": "keyword"
+        },
+        "size": {
+          "type": "keyword"
+        },
+        "size_eu": {
+          "type": "float"
+        },
+        "size_system": {
+          "type": "keyword"
+        },
+        "supplier": {
+          "type": "keyword"
+        },
+        "supplier_sku": {
+          "type": "keyword"
+        },
+        "title": {
+          "analyzer": "english",
+          "fields": {
+            "autocomplete": {
+              "analyzer": "autocomplete_index",
+              "search_analyzer": "autocomplete_search",
+              "type": "text"
+            }
+          },
+          "search_analyzer": "english_synonyms",
+          "type": "text"
+        },
+        "updated_at": {
+          "type": "date"
+        }
+      }
+    },
+    "settings": {
+      "analysis": {
+        "analyzer": {
+          "autocomplete_index": {
+            "filter": [
+              "lowercase",
+              "autocomplete_edge"
+            ],
+            "tokenizer": "standard",
+            "type": "custom"
+          },
+          "autocomplete_search": {
+            "filter": [
+              "lowercase"
+            ],
+            "tokenizer": "standard",
+            "type": "custom"
+          },
+          "english_synonyms": {
+            "filter": [
+              "english_possessive_stemmer",
+              "lowercase",
+              "english_stop",
+              "color_material_synonyms",
+              "english_keywords",
+              "english_stemmer"
+            ],
+            "tokenizer": "standard",
+            "type": "custom"
+          }
+        },
+        "filter": {
+          "autocomplete_edge": {
+            "max_gram": 15,
+            "min_gram": 2,
+            "type": "edge_ngram"
+          },
+          "color_material_synonyms": {
+            "lenient": true,
+            "synonyms": [
+              "grey, gray",
+              "aluminium, aluminum",
+              "polyamide, nylon",
+              "stainless steel, stainless",
+              "black => black, onyx",
+              "white => white, ivory, cream, off white",
+              "gray => gray, grey, charcoal, graphite",
+              "beige => beige, khaki",
+              "red => red, burgundy, maroon, crimson",
+              "pink => pink, fuchsia, blush",
+              "yellow => yellow, mustard",
+              "green => green, olive, sage",
+              "blue => blue, navy, teal, cobalt, turquoise",
+              "purple => purple, violet, lavender",
+              "wool => wool, merino"
+            ],
+            "type": "synonym_graph"
+          },
+          "english_keywords": {
+            "keywords": [],
+            "type": "keyword_marker"
+          },
+          "english_possessive_stemmer": {
+            "language": "possessive_english",
+            "type": "stemmer"
+          },
+          "english_stemmer": {
+            "language": "english",
+            "type": "stemmer"
+          },
+          "english_stop": {
+            "stopwords": "_english_",
+            "type": "stop"
+          }
+        }
+      },
+      "index": {
+        "knn": true,
+        "number_of_replicas": 0,
+        "number_of_shards": 1
+      }
+    }
+  }
+}

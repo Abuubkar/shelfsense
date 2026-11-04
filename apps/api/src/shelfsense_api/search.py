@@ -135,6 +135,20 @@ TEMPLATES = {
 }
 
 
+def template_changes(recorded: dict[str, Any], current: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """How a version's template moved from its recorded snapshot (contracts/index/): what changed in place, which
+    needs a new index version, and which top-level fields were added, which is allowed (NEW_FIELDS) but must be
+    recorded. Settings, analysis included, count as one thing that can change."""
+    old, new = recorded["template"], current["template"]
+    changed = ["settings"] if old["settings"] != new["settings"] else []
+    old_fields, new_fields = old["mappings"]["properties"], new["mappings"]["properties"]
+    changed += [f"field {name}" for name in old_fields if old_fields[name] != new_fields.get(name)]
+    if {k: v for k, v in old["mappings"].items() if k != "properties"} != \
+            {k: v for k, v in new["mappings"].items() if k != "properties"}:
+        changed.append("mapping options")
+    return changed, sorted(set(new_fields) - set(old_fields))
+
+
 class SearchUnavailable(Exception):
     pass
 

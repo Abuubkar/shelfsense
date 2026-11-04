@@ -5,9 +5,12 @@
     make eval-test             # the test split (LIVE=1 to record it)
     uv run python evals/run.py [--split dev|test] [--live] [--only enrich,parse,search,latency]
                                [--baseline evals/baseline.json] [--write-baseline] [--latency-queries 1000]
+                               [--fail-on misses|regressions]
 
 Writes evals/results/<split>.json and evals/REPORT.md (REPORT-test.md for the test split) and exits 1 when a
-gate is missed, or with --baseline when a gated quality metric drops more than 1.5 points.
+gate is missed, or with --baseline when a gated quality metric drops more than 1.5 points. CI runs it with
+--fail-on regressions against main's results: then only a drop, or a gate main passes that now misses, fails it;
+known misses are reported, not failed on (the gates themselves don't change).
 
 Every model call goes through llm.chat_json, which records it by prompt hash (evals/recordings/<split>.jsonl.gz)
 or replays it, with its recorded wall time, so a replay reports the same metrics as the live run it recorded.
@@ -423,6 +426,12 @@ def check_gates(metrics: dict[str, Any]) -> list[dict[str, Any]]:
     return results
 
 
+def newly_missed(gates: list[dict[str, Any]], baseline: dict[str, Any]) -> list[str]:
+    """Gates this run misses that the baseline passed."""
+    before = {g["metric"]: g["passed"] for g in check_gates(baseline)}
+    return [g["metric"] for g in gates if not g["passed"] and before.get(g["metric"])]
+
+
 def check_baseline(metrics: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
     """Gated 0-1 quality metrics that got worse than the baseline by more than 1.5 points."""
     drops = []
@@ -514,6 +523,8 @@ async def main() -> None:
     parser.add_argument("--only", default="enrich,parse,search")
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--write-baseline", action="store_true")
+    parser.add_argument("--fail-on", choices=("misses", "regressions"), default="misses",
+                        help="regressions: fail only on baseline drops and newly missed gates (needs --baseline)")
     parser.add_argument("--latency-queries", type=int, default=1000)
     args = parser.parse_args()
     sections = set(args.only.split(","))
@@ -566,8 +577,12 @@ async def main() -> None:
         "prompts": {"enrich": prompts.ENRICH_VERSION, "query": prompts.QUERY_VERSION},
         "taxonomy": settings.taxonomy_version, "metrics": metrics, "gates": check_gates(metrics),
     }
+    if args.fail_on == "regressions" and not args.baseline:
+        raise SystemExit("--fail-on regressions needs --baseline")
     if args.baseline:
-        result["baseline_drops"] = check_baseline(metrics, json.loads(args.baseline.read_text())["metrics"])
+        before = json.loads(args.baseline.read_text())["metrics"]
+        result["baseline_drops"] = check_baseline(metrics, before)
+        result["newly_missed"] = newly_missed(result["gates"], before)
     results_path.parent.mkdir(exist_ok=True)
     if results_path.exists():  # results are kept, never overwritten (evals/archive/)
         archived = EVALS / "archive" / "results" / f"{args.split}-{previous.get('mode', 'run')}-" \
@@ -584,6 +599,10 @@ async def main() -> None:
     print("gates missed: " + (", ".join(missed) or "none"))
     if result.get("baseline_drops"):
         print("baseline drops: " + "; ".join(result["baseline_drops"]))
+    if result.get("newly_missed"):
+        print("newly missed (passed in the baseline): " + ", ".join(result["newly_missed"]))
+    if args.fail_on == "regressions":
+        sys.exit(1 if result["baseline_drops"] or result["newly_missed"] else 0)
     sys.exit(1 if missed or result.get("baseline_drops") else 0)
 
 

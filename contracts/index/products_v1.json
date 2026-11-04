@@ -1,0 +1,102 @@
+{
+  "index_patterns": [
+    "products_v1"
+  ],
+  "template": {
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "brand": {
+          "fields": {
+            "text": {
+              "type": "text"
+            }
+          },
+          "type": "keyword"
+        },
+        "category_id": {
+          "type": "integer"
+        },
+        "category_path": {
+          "analyzer": "english",
+          "type": "text"
+        },
+        "color": {
+          "normalizer": "lowercase",
+          "type": "keyword"
+        },
+        "currency": {
+          "type": "keyword"
+        },
+        "description": {
+          "analyzer": "english",
+          "type": "text"
+        },
+        "embedding": {
+          "dimension": 384,
+          "method": {
+            "engine": "faiss",
+            "name": "hnsw"
+          },
+          "space_type": "cosinesimil",
+          "type": "knn_vector"
+        },
+        "facets": {
+          "properties": {
+            "name": {
+              "type": "keyword"
+            },
+            "value": {
+              "type": "keyword"
+            }
+          },
+          "type": "nested"
+        },
+        "gender": {
+          "type": "keyword"
+        },
+        "gtin": {
+          "type": "keyword"
+        },
+        "material": {
+          "type": "keyword"
+        },
+        "price_minor": {
+          "type": "long"
+        },
+        "product_id": {
+          "type": "keyword"
+        },
+        "size": {
+          "type": "keyword"
+        },
+        "size_eu": {
+          "type": "float"
+        },
+        "size_system": {
+          "type": "keyword"
+        },
+        "supplier": {
+          "type": "keyword"
+        },
+        "supplier_sku": {
+          "type": "keyword"
+        },
+        "title": {
+          "analyzer": "english",
+          "type": "text"
+        },
+        "updated_at": {
+          "type": "date"
+        }
+      }
+    },
+    "settings": {
+      "index": {
+        "knn": true,
+        "number_of_replicas": 0,
+        "number_of_shards": 1
+      }
+    }
+  }
+}

@@ -47,6 +47,7 @@ OASDIFF := docker run --rm -v $(CURDIR):/specs:ro tufin/oasdiff:v1.35.0
 codegen:
 	uv run python -c "from shelfsense_api.graphql import schema; print(schema.as_str())" > contracts/schema.graphql
 	uv run python scripts/write_message_schemas.py
+	uv run python scripts/write_index_snapshots.py
 	uv run python scripts/write_money_fixtures.py
 	cd apps/web && pnpm codegen
 	uv run openapi-python-client generate --path contracts/openapi.yaml --output-path packages/clients/python \
