@@ -1,6 +1,6 @@
 # Shelfsense eval report (dev split)
 
-replay run, 2026-11-04 03:14 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
+replay run, 2026-11-04 03:26 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
 
 Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 
