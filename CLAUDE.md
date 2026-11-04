@@ -45,7 +45,12 @@ make eval-test                               # the test split; run it only to re
 make eval-latency                            # 1,000 searches on the catalog by parse path (live, ~45 min)
 make sweep                                   # enrichment and query models compared on dev (evals/SWEEP.md); LIVE=1 ~80 min
 make golden                                  # rebuild evals/golden/products.jsonl (hard cases are hand-written)
+make lint                                    # ruff, mypy, eslint, tsc: CI's lint job (actionlint aside)
 make test                                    # unit tests, offline (and the eval metric tests)
+make migrations-lint                         # squawk on migrations added since origin/main
+make perf-smoke [BASE_URL=…]                 # CI's k6 search smoke against a running API (keep OLLAMA_HOST off)
+docker build --target api -t shelfsense-api .   # one Dockerfile, targets api|worker-enrich|worker-index|supplier-mock
+docker build -f apps/web/Dockerfile -t shelfsense-web .
 make chaos                                   # slice 3 Done-when: 2,000 products through failing stubs (~3 min)
 make test-int                                # service tests on Postgres, OpenSearch and Floci containers (~3 min)
 make codegen                                 # after changing contracts, GraphQL types or messages.py (also apps/web's types)
@@ -121,6 +126,13 @@ make contract-check                          # oasdiff: the code's spec vs contr
   number pass. Metrics live in `evals/metrics.py`, relevance in `evals/grading.py`, both unit-tested. A prompt,
   model or ranking change is followed by `make eval LIVE=1` and a committed recording; old recordings and results
   are archived under `evals/archive/`, never deleted.
+- CI (ADR 0020): every PR runs `.github/workflows/ci.yml` and merges when it's green. Actions are pinned to a full
+  commit SHA with the version in a comment; bump both together. A breaking contract change (OpenAPI, GraphQL, a
+  message) needs the `breaking-change-approved` label; a message changed without a `schema_version` bump can't be
+  approved. eval-offline fails on regressions against the base branch, never on main's known misses; gates don't
+  move. Merges to main publish signed images to `ghcr.io/abuubkar/shelfsense-<service>`.
+- A new migration must pass squawk (`make migrations-lint`): `SET LOCAL lock_timeout` before the first statement
+  that locks a busy table (a foreign key to `products` locks it too).
 - Indexing goes through `indexing.bulk_index` (adaptive batch size, per-item retries), from the worker and
   `scripts/sync_index.py` alike.
 - The taxonomy file is never fetched at runtime. `data/taxonomy/<version>.txt` and its `.sha256` are committed;

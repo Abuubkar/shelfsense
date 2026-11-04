@@ -1,0 +1,292 @@
+# Checks on every pull request and every push to main (ADR 0020). Each job gets only the permissions it needs, and
+# every third-party action is pinned to a full commit SHA (the version is in the comment next to it). There is no
+# Ollama here: model replies come from committed recordings (eval-offline), and a search that needs the query model
+# degrades to keywords (perf-smoke).
+name: CI
+
+on:
+  pull_request:
+    # labeled/unlabeled: adding breaking-change-approved reruns the contract checks.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.7"  # the same uv as the Dockerfile
+  BASE_REF: ${{ github.base_ref || 'main' }}
+  BREAKING_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'breaking-change-approved') }}
+  FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+  OLLAMA_HOST: http://127.0.0.1:9  # nothing listens: no model calls in CI
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with: { package_json_file: apps/web/package.json }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24, cache: pnpm, cache-dependency-path: apps/web/pnpm-lock.yaml }
+      - run: uv sync --locked
+      - run: pnpm --dir apps/web install --frozen-lockfile
+      - name: ruff
+        run: uv run ruff check --output-format github .
+      - name: mypy
+        run: uv run mypy
+      - name: tsc
+        run: pnpm --dir apps/web typecheck
+      - name: eslint
+        run: pnpm --dir apps/web lint
+      - name: actionlint
+        run: |
+          curl -sSfL -o actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tgz" | sha256sum -c -
+          tar -xzf actionlint.tgz actionlint && ./actionlint -color
+
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with: { package_json_file: apps/web/package.json }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24, cache: pnpm, cache-dependency-path: apps/web/pnpm-lock.yaml }
+      - run: uv sync --locked
+      - run: pnpm --dir apps/web install --frozen-lockfile
+      - name: Generated code is up to date (clients, schemas, index snapshots)
+        run: |
+          make codegen
+          git diff --exit-code || { echo "::error::make codegen changed files: run it and commit the result"; exit 1; }
+      - name: The code serves the spec (oasdiff)
+        run: make contract-check
+      - name: Breaking changes against the base branch
+        run: |
+          mkdir -p build/base/messages
+          git show "origin/$BASE_REF:contracts/openapi.yaml" > build/base/openapi.yaml
+          git show "origin/$BASE_REF:contracts/schema.graphql" > build/base/schema.graphql
+          for f in $(git ls-tree --name-only "origin/$BASE_REF" contracts/messages/); do
+            git show "origin/$BASE_REF:$f" > "build/base/messages/$(basename "$f")"
+          done
+          breaking=0
+          docker run --rm -v "$PWD:/specs:ro" tufin/oasdiff:v1.35.0 breaking --fail-on ERR \
+            /specs/build/base/openapi.yaml /specs/contracts/openapi.yaml || breaking=1
+          npx --yes @graphql-inspector/cli@7.0.2 diff build/base/schema.graphql contracts/schema.graphql || breaking=1
+          set +e; uv run python scripts/check_message_compat.py build/base/messages contracts/messages; messages=$?; set -e
+          if [ "$messages" = 2 ]; then echo "::error::a message changed incompatibly without a schema_version bump"; exit 1; fi
+          [ "$messages" = 1 ] && breaking=1
+          if [ "$breaking" = 1 ] && [ "$BREAKING_APPROVED" != true ]; then
+            echo "::error::breaking contract change: add the breaking-change-approved label if it's deliberate"; exit 1
+          fi
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - run: uv sync --locked
+      - run: uv run pytest -m "not integration"
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with: { path: "${{ env.FASTEMBED_CACHE_PATH }}", key: "fastembed-${{ hashFiles('apps/api/src/shelfsense_api/embeddings.py') }}" }
+      - name: OpenSearch needs vm.max_map_count >= 262144
+        run: sudo sysctl -w vm.max_map_count=262144
+      - run: uv sync --locked
+      - name: Service tests (testcontainers Postgres, OpenSearch, Floci)
+        run: uv run pytest -m integration
+
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: shelfsense, POSTGRES_PASSWORD: shelfsense, POSTGRES_DB: shelfsense }
+        ports: ["5436:5432"]
+        options: --health-cmd "pg_isready -U shelfsense" --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - run: uv sync --locked
+      - name: Up, down to base, up again
+        run: uv run alembic upgrade head && uv run alembic downgrade base && uv run alembic upgrade head
+      - name: squawk on the migrations this branch adds
+        run: |
+          mkdir -p build
+          uv run python scripts/render_migrations.py --since "origin/$BASE_REF" > build/new-migrations.sql
+          if [ -s build/new-migrations.sql ]; then uvx --from squawk-cli==2.71.0 squawk build/new-migrations.sql; fi
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with: { package_json_file: apps/web/package.json }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: 24, cache: pnpm, cache-dependency-path: apps/web/pnpm-lock.yaml }
+      - run: pnpm --dir apps/web install --frozen-lockfile
+      - run: pnpm --dir apps/web test --ci
+
+  eval-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write  # the sticky eval comment
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: shelfsense, POSTGRES_PASSWORD: shelfsense, POSTGRES_DB: shelfsense }
+        ports: ["5436:5432"]
+        options: --health-cmd "pg_isready -U shelfsense" --health-interval 2s --health-timeout 5s --health-retries 30
+      opensearch:
+        image: opensearchproject/opensearch:3.9.0
+        env:
+          discovery.type: single-node
+          DISABLE_SECURITY_PLUGIN: "true"
+          DISABLE_INSTALL_DEMO_CONFIG: "true"
+          OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+        ports: ["9201:9200"]
+        options: >-
+          --health-cmd "curl -fs localhost:9200/_cluster/health?wait_for_status=yellow"
+          --health-interval 5s --health-timeout 5s --health-retries 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with: { path: "${{ env.FASTEMBED_CACHE_PATH }}", key: "fastembed-${{ hashFiles('apps/api/src/shelfsense_api/embeddings.py') }}" }
+      - run: uv sync --locked
+      - name: Schema and taxonomy embeddings
+        run: uv run alembic upgrade head && uv run python scripts/load_taxonomy.py
+      - name: Replay the evals; fail only on a regression against the base branch
+        id: eval
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          mkdir -p build
+          base="origin/$BASE_REF"; [ "${{ github.event_name }}" = push ] && base="$BEFORE"
+          git show "$base:evals/results/dev.json" > build/base-results.json
+          set +e
+          uv run python -u evals/run.py --split dev --baseline build/base-results.json --fail-on regressions
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+          uv run python evals/pr_comment.py evals/results/dev.json build/base-results.json > build/eval-comment.md
+          cat build/eval-comment.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- shelfsense-eval -->")) | .id' | head -1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@build/eval-comment.md > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@build/eval-comment.md > /dev/null
+          fi
+      - name: Result
+        env:
+          CODE: ${{ steps.eval.outputs.code }}
+        run: exit "$CODE"
+
+  perf-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env: { POSTGRES_USER: shelfsense, POSTGRES_PASSWORD: shelfsense, POSTGRES_DB: shelfsense }
+        ports: ["5436:5432"]
+        options: --health-cmd "pg_isready -U shelfsense" --health-interval 2s --health-timeout 5s --health-retries 30
+      opensearch:
+        image: opensearchproject/opensearch:3.9.0
+        env:
+          discovery.type: single-node
+          DISABLE_SECURITY_PLUGIN: "true"
+          DISABLE_INSTALL_DEMO_CONFIG: "true"
+          OPENSEARCH_JAVA_OPTS: -Xms1g -Xmx1g
+        ports: ["9201:9200"]
+        options: >-
+          --health-cmd "curl -fs localhost:9200/_cluster/health?wait_for_status=yellow"
+          --health-interval 5s --health-timeout 5s --health-retries 40
+      redis:
+        image: redis:8.6.8-alpine  # as docker-compose.yml
+        ports: ["6380:6379"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - name: Did search or API code change?
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base="origin/$BASE_REF"; [ "${{ github.event_name }}" = push ] && base="$BEFORE"
+          if git diff --name-only "$base" HEAD | grep -qE '^(apps/api/src/|perf/|evals/golden/queries\.jsonl$|pyproject\.toml$|uv\.lock$|\.github/workflows/ci\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No search or API change: skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.changes.outputs.run == 'true'
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
+      - if: steps.changes.outputs.run == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with: { path: "${{ env.FASTEMBED_CACHE_PATH }}", key: "fastembed-${{ hashFiles('apps/api/src/shelfsense_api/embeddings.py') }}" }
+      - if: steps.changes.outputs.run == 'true'
+        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
+        with: { k6-version: "2.3.0" }
+      - name: 5,000 products, indexed
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          uv sync --locked
+          uv run alembic upgrade head
+          uv run python scripts/seed.py --profile small
+          uv run python scripts/sync_index.py
+      - name: Start the API
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          nohup uv run uvicorn shelfsense_api.main:app --port 8020 > api.log 2>&1 &
+          for _ in $(seq 1 60); do curl -fs localhost:8020/docs > /dev/null && exit 0; sleep 1; done
+          cat api.log; exit 1
+      - name: 500 searches (k6); fails when the fast path's p95 is over 150 ms
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          set -o pipefail
+          k6 run --quiet -e BASE_URL=http://localhost:8020 perf/search.js | tee build-k6.txt
+      - name: Summary
+        if: always() && steps.changes.outputs.run == 'true'
+        run: |
+          { echo '### perf-smoke'; echo '```'; cat build-k6.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          tail -20 api.log 2>/dev/null || true
