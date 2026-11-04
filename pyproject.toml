@@ -27,6 +27,7 @@ addopts = "--strict-markers"
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "openapi-python-client>=0.29.1",
     "pyarrow>=26.0.0",
     "pytest>=9.2.0",
@@ -44,6 +45,12 @@ extend-exclude = ["packages/clients/python"]
 [tool.ruff.lint]
 # Ruff's defaults (pyflakes and the pycodestyle errors) plus import order and pyupgrade.
 select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["apps/api/src", "apps/supplier_mock/src", "apps/worker_enrich/src", "apps/worker_index/src"]
+# fastembed, opensearch-py and a few others ship no type information.
+ignore_missing_imports = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["shelfsense_api", "shelfsense_client", "shelfsense_supplier_mock", "shelfsense_worker_enrich", "shelfsense_worker_index"]

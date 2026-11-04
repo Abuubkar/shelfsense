@@ -1,0 +1,16 @@
+.venv
+.git
+data
+build
+evals
+docs
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.env
+apps/web/node_modules
+apps/web/.next
+apps/web/tsconfig.tsbuildinfo
+apps/web/__tests__
+apps/web/jest.config.ts
+apps/web/jest.setup.ts

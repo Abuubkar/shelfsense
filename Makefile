@@ -1,6 +1,6 @@
 TAXONOMY_URL := https://www.google.com/basepages/producttype/taxonomy-with-ids.en-US.txt
 
-.PHONY: taxonomy test test-int codegen contract-check smoke chaos web web-test golden eval eval-test eval-latency sweep
+.PHONY: taxonomy lint test test-int codegen contract-check smoke chaos web web-test golden eval eval-test eval-latency sweep
 
 # Download the official Google Product Taxonomy (with IDs) as data/taxonomy/<version>.txt plus its checksum.
 # The version comes from the file's own header. Never fetched at runtime; scripts/load_taxonomy.py reads the file.
@@ -11,6 +11,12 @@ taxonomy:
 	test -n "$$v" || { echo "no version header in the download"; exit 1; }; \
 	mv data/taxonomy/download.tmp data/taxonomy/$$v.txt; \
 	cd data/taxonomy && shasum -a 256 $$v.txt > $$v.txt.sha256 && echo "data/taxonomy/$$v.txt" && cat $$v.txt.sha256
+
+# What CI's lint job runs (.github/workflows/ci.yml), minus actionlint.
+lint:
+	uv run ruff check .
+	uv run mypy
+	cd apps/web && pnpm lint && pnpm typecheck
 
 test:
 	uv run pytest -m "not integration"

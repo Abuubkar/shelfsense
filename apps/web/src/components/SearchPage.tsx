@@ -11,6 +11,8 @@ import { SearchBox } from "./SearchBox";
 
 const PAGE_SIZE = 24;
 
+type Results = { key: string; first: SearchResponse; items: SearchItem[]; cursor: string | null };
+
 /** Variant A from the slice 5b prototypes: facet sidebar, card grid, "Load more" through the opaque cursor. The
  * URL is the state: searching, ticking a facet or going Back all change it, and the page follows. */
 export function SearchPage() {
@@ -19,11 +21,11 @@ export function SearchPage() {
   const pathname = usePathname();
   const key = params.toString();
   const state = useMemo(() => fromParams(new URLSearchParams(key)), [key]);
-  const [first, setFirst] = useState<SearchResponse | null>(null);
-  const [items, setItems] = useState<SearchItem[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Results and failures carry the URL they belong to, so loading is derived (the shown results are another
+  // URL's) instead of set inside the effect; the previous search's results stay on screen meanwhile.
+  const [results, setResults] = useState<Results | null>(null);
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchPage = useCallback(async (after?: string) => {
     const { data, error: problem } = await api.GET("/v1/search", {
@@ -35,27 +37,29 @@ export function SearchPage() {
 
   useEffect(() => {
     let current = true;
-    setLoading(true);
-    setError(null);
     fetchPage()
-      .then((data) => { if (current) { setFirst(data); setItems(data.items); setCursor(data.next_cursor ?? null); } })
-      .catch((e: Error) => current && setError(e.message))
-      .finally(() => current && setLoading(false));
+      .then((data) => current && setResults({ key, first: data, items: data.items, cursor: data.next_cursor ?? null }))
+      .catch((e: Error) => current && setFailure({ key, message: e.message }));
     return () => { current = false; };
-  }, [fetchPage]);
+  }, [fetchPage, key]);
+
+  const first = results?.first ?? null;
+  const items = results?.items ?? [];
+  const cursor = results?.cursor ?? null;
+  const error = failure?.key === key ? failure.message : null;
+  const loading = loadingMore || (results?.key !== key && failure?.key !== key);
 
   const go = (next: SearchState) => router.push(`${pathname}?${toParams(next)}`, { scroll: false });
   const loadMore = async () => {
     if (!cursor) return;
-    setLoading(true);
+    setLoadingMore(true);
     try {
       const data = await fetchPage(cursor);
-      setItems((previous) => previous.concat(data.items));
-      setCursor(data.next_cursor ?? null);
+      setResults((r) => r && r.key === key ? { ...r, items: r.items.concat(data.items), cursor: data.next_cursor ?? null } : r);
     } catch (e) {
-      setError((e as Error).message);
+      setFailure({ key, message: (e as Error).message });
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -65,7 +69,7 @@ export function SearchPage() {
     <>
       <header className="top">
         <Link className="logo" href="/">shelfsense</Link>
-        <SearchBox value={state.q} onSearch={(q) => go({ q, brand: [], color: [], category_id: [], price: null })} />
+        <SearchBox key={state.q} value={state.q} onSearch={(q) => go({ q, brand: [], color: [], category_id: [], price: null })} />
       </header>
       <div className="layout">
         <FacetSidebar facets={first?.facets ?? []} state={state}

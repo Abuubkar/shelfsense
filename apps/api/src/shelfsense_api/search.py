@@ -45,7 +45,7 @@ NEW_FIELDS = {
     "facets": {"type": "nested", "properties": {"name": {"type": "keyword"}, "value": {"type": "keyword"}}},
 }
 
-_V1_PROPERTIES = {
+_V1_PROPERTIES: dict[str, Any] = {
     "product_id": {"type": "keyword"},
     "supplier": {"type": "keyword"},
     "supplier_sku": {"type": "keyword"},
@@ -289,7 +289,8 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
     q = " ".join(q.split())
     scope = scope or {"q": q, "filters": asdict(filters)}
     timings: dict[str, int] = {}
-    position = cursor.decode(after, scope, settings.cursor_secret) if after else {"rank": 0, "after": None}
+    position: dict[str, Any] = (cursor.decode(after, scope, settings.cursor_secret) if after
+                                else {"rank": 0, "after": None})
 
     started = time.perf_counter()
     vector = await asyncio.to_thread(embed_query, q) if q else None
@@ -402,7 +403,8 @@ async def _tail(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | Non
 async def _facets(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | None,
                   filters: Filters) -> tuple[int, dict[str, list[FacetValue]]]:
     """Total and facet counts over the whole result set, after all filters (drill-down facets)."""
-    aggs = {name: {"terms": {"field": name, "size": FACET_SIZE}} for name in ("brand", "color", "category_id")}
+    aggs: dict[str, Any] = {name: {"terms": {"field": name, "size": FACET_SIZE}}
+                            for name in ("brand", "color", "category_id")}
     aggs["price"] = {"range": {"field": "price_minor", "ranges": [
         {"key": key} | ({"from": lo} if lo is not None else {}) | ({"to": hi} if hi is not None else {})
         for key, lo, hi in PRICE_BUCKETS]}}

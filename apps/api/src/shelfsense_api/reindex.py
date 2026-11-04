@@ -53,7 +53,8 @@ async def served_indices(os: AsyncOpenSearch) -> list[str]:
 
 async def db_now(session: AsyncSession) -> datetime:
     # Not now(): that is the transaction's start, and a reindex session stays in one read transaction for hours.
-    return await session.scalar(select(func.statement_timestamp()))
+    now: datetime = (await session.execute(select(func.statement_timestamp()))).scalar_one()
+    return now
 
 
 async def changed_since(session: AsyncSession, since: datetime) -> list[uuid.UUID]:

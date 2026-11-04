@@ -42,8 +42,8 @@ def read_release(path: Path) -> tuple[str, list[Node]]:
 
     rows = []
     for line in lines[1:]:
-        node_id, _, full_path = line.partition(" - ")
-        rows.append((int(node_id), full_path.strip()))
+        raw_id, _, full_path = line.partition(" - ")
+        rows.append((int(raw_id), full_path.strip()))
     id_by_path = {full_path: node_id for node_id, full_path in rows}
     parents = set()
     nodes = []

@@ -157,7 +157,7 @@ async def classify_product(session: AsyncSession, product: Product, attempt: int
         await session.commit()
         raise decision.error
     reply, chosen = decision.reply, decision.chosen
-    assert reply is not None and decision.grounding is not None
+    assert reply is not None and chosen is not None and decision.grounding is not None
 
     values = {
         "product_id": product.id,
@@ -175,11 +175,11 @@ async def classify_product(session: AsyncSession, product: Product, attempt: int
         "prompt_eval_ms": reply.prompt_eval_ms,
         "eval_ms": reply.eval_ms,
     }
-    stmt = insert(ProductCategory).values(values)
-    stmt = stmt.on_conflict_do_update(
+    row = insert(ProductCategory).values(values)
+    stmt = row.on_conflict_do_update(
         index_elements=["product_id", "taxonomy_version"],
-        set_={k: stmt.excluded[k] for k in values if k not in ("product_id", "taxonomy_version")}
-        | {"created_at": stmt.excluded.created_at},
+        set_={k: row.excluded[k] for k in values if k not in ("product_id", "taxonomy_version")}
+        | {"created_at": row.excluded.created_at},
     ).returning(ProductCategory)
     category = (await session.scalars(stmt)).one()
     grounding = decision.grounding
