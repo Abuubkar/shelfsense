@@ -287,8 +287,12 @@ jobs:
         run: |
           set -o pipefail
           k6 run --quiet -e BASE_URL=http://localhost:8020 perf/search.js | tee build-k6.txt
+      - name: Where the time goes (rules-path stages)
+        if: always() && steps.changes.outputs.run == 'true'
+        run: uv run python scripts/search_timings.py | tee build-stages.txt
       - name: Summary
         if: always() && steps.changes.outputs.run == 'true'
         run: |
-          { echo '### perf-smoke'; echo '```'; cat build-k6.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### perf-smoke'; echo '```'; cat build-k6.txt 2>/dev/null; echo; cat build-stages.txt 2>/dev/null
+            echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           tail -20 api.log 2>/dev/null || true
