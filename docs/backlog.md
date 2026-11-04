@@ -14,9 +14,10 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   cold" also returns a laptop sleeve, ranked last by the reranker. Tune `KNN_MIN_SCORE` and `HYBRID_WEIGHTS`
   against nDCG on the slice 6 golden set; consider also dropping head items below a rerank score.
 - **Models download on the first request** (slice 2; slice 7 kept them out of the images). The first search after a
-  fresh start waits for the reranker download (~1.1 GB) unless `/app/models` is a volume that already has it.
+  fresh start waits for the model downloads (~210 MB) unless `/app/models` is a volume that already has them.
   Options: warm both models at API startup (a slow start instead of a slow first search), or a separate model
-  image/volume populated once per release. Baking them in costs ~1.2 GB per image per architecture per merge.
+  image/volume populated once per release. Since the smaller reranker (ADR 0021), baking them in costs ~210 MB per
+  image per architecture per merge: worth reconsidering.
 - **Every tail page re-runs the hybrid query** (slice 2). ~10–50 ms per page to recover the head's IDs, the price
   of small cursors (ADR 0006). If deep paging gets hot, cache head IDs per PIT in Redis (slice 5 brings Redis).
 - **Multi-select facets** (slice 2). Facet counts are drill-down (after all filters, including the facet's own).
@@ -86,13 +87,13 @@ Improvements found and deliberately not done yet, with the suggested fix and its
   model, and measure.
 - **`wooden` doesn't wake the query model** (slice 6a). The fast path's material words are the normalized
   vocabulary, so "wooden prayer beads" skips the model and loses its material.
-- **Search latency is the CPU reranker** (slice 6a, measured by `make eval-latency`). p95 2,110 ms on the rules
-  path, 1,876 ms on cache hits and 3,630 ms on model parses, against gates of 150, 180 and 3,000 ms. Reranking
-  costs ~40 ms per product on the M1 Pro CPU; everything else is a median 29 ms. Options, each to measure with
-  the eval: a smaller head (20 would be ~0.8 s, and nDCG needs checking), a smaller cross-encoder
-  (`ms-marco-MiniLM-L-6-v2`), caching rerank scores per (query, product content hash) for repeated head queries,
-  or GPU/ONNX acceleration in production. A latency query set written for the catalog is needed too: 17 of the
-  80 golden dev queries find nothing in it.
+- **Search latency is the CPU reranker** (slice 6a; mostly addressed in slice 7, ADR 0021). Measured with
+  bge-reranker-base over a head of 50: p95 2,110 ms on the rules path, 1,876 ms on cache hits, 3,630 ms on model
+  parses (gates 150, 180, 3,000). Slice 7 moved to ms-marco-MiniLM-L-6-v2 over a head of 10 (~54 ms of rerank on
+  the M1 Pro, golden nDCG@10 0.8147 -> 0.8208). Still open: `make eval-latency` has to be re-run live once Ollama
+  is free (the numbers in evals/results are the old setup's); caching rerank scores per (query, product content
+  hash) for repeated head queries; and a latency query set written for the catalog (17 of the 80 golden dev
+  queries find nothing in it).
 - **Model choice: recommendation from the 6b sweep, defaults unchanged** (`evals/SWEEP.md`).
   - *Enrichment: keep qwen2.5:7b.* llama3.1:8b scored 2.1 points more leaf accuracy (0.857 vs 0.836: 9 products
     only it got right, 3 only qwen did, McNemar p = 0.15, so not shown to be better), mostly on accessories,

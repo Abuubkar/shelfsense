@@ -1,4 +1,4 @@
-"""The one way Shelfsense embeds and reranks text: bge models through fastembed, on the CPU."""
+"""The one way Shelfsense embeds and reranks text: bge-small and a MiniLM cross-encoder through fastembed, on the CPU."""
 
 from functools import cache
 
@@ -6,7 +6,8 @@ from fastembed import TextEmbedding
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-RERANK_MODEL = "BAAI/bge-reranker-base"
+# 9x faster than bge-reranker-base on the CPU and no worse on the golden set (docs/adr/0021).
+RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"
 # Long descriptions add compute, not signal: what a product is shows in its title and first lines.
 MAX_PRODUCT_TEXT_CHARS = 1500
 
@@ -19,7 +20,7 @@ def _embedder() -> TextEmbedding:
 
 @cache
 def _reranker() -> TextCrossEncoder:
-    # ~1.1 GB on first use.
+    # ~80 MB on first use.
     return TextCrossEncoder(model_name=RERANK_MODEL)
 
 

@@ -1,6 +1,6 @@
 # Shelfsense eval report (dev split)
 
-replay run, 2026-11-04 02:07 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
+replay run, 2026-11-04 03:06 UTC. Enrichment model `qwen2.5:7b-instruct` (enrich/2), query model `qwen2.5:3b-instruct` (query/1), taxonomy 2021-09-21.
 
 Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 
@@ -17,8 +17,8 @@ Written by `evals/run.py`; the numbers are in `evals/results/dev.json`.
 | enrichment.products_per_hour | 629 | >= 400 | pass |
 | parse.exact_match | 0.7625 | >= 0.75 | pass |
 | parse.slot_f1 | 0.6567 | >= 0.9 | **miss** |
-| search.ndcg10 | 0.8147 | >= 0.72 | pass |
-| search.ndcg10_over_bm25 | 0.1024 | >= 0.08 | pass |
+| search.ndcg10 | 0.8208 | >= 0.72 | pass |
+| search.ndcg10_over_bm25 | 0.1085 | >= 0.08 | pass |
 | search.zero_result_rate | 0.0375 | <= 0.02 | **miss** |
 | latency.rules_p95_ms | 2110 | <= 150 | **miss** |
 | latency.llm_p95_ms | 3630 | <= 3000 | **miss** |
@@ -148,23 +148,23 @@ Wrong parses:
 
 ## Search (80 queries over 400 golden products)
 
-nDCG@10 by tier: {'head': 0.9769, 'torso': 0.8171, 'tail': 0.5463}.
+nDCG@10 by tier: {'head': 0.9695, 'torso': 0.8273, 'tail': 0.5681}.
 
 | Configuration | nDCG@10 | MRR | Zero results |
 |---|---:|---:|---:|
 | BM25 only | 0.7123 | 0.7509 | 18.8% |
 | vector only | 0.8572 | 0.8765 | 0.0% |
-| hybrid, min-max (shipped) | 0.8657 | 0.8766 | 0.0% |
-| hybrid + rerank, min-max (shipped) | 0.8723 | 0.8681 | 0.0% |
-| hybrid, min-max, BM25 floor 0 | 0.8762 | 0.8780 | 0.0% |
-| hybrid + rerank, min-max, BM25 floor 0 | 0.8723 | 0.8681 | 0.0% |
-| hybrid, l2 | 0.8731 | 0.8693 | 0.0% |
-| hybrid + rerank, l2 | 0.8723 | 0.8681 | 0.0% |
-| hybrid, z-score | 0.8542 | 0.8646 | 0.0% |
-| hybrid + rerank, z-score | 0.8723 | 0.8681 | 0.0% |
-| hybrid, RRF (rank 60) | 0.8770 | 0.8828 | 0.0% |
-| hybrid + rerank, RRF (rank 60) | 0.8723 | 0.8681 | 0.0% |
-| hybrid + rerank + parsed filters (shipped) | 0.8147 | 0.8708 | 3.8% |
+| hybrid, min-max (shipped) | 0.8690 | 0.8786 | 0.0% |
+| hybrid + rerank, min-max (shipped) | 0.8718 | 0.8541 | 0.0% |
+| hybrid, min-max, BM25 floor 0 | 0.8783 | 0.8780 | 0.0% |
+| hybrid + rerank, min-max, BM25 floor 0 | 0.8774 | 0.8541 | 0.0% |
+| hybrid, l2 | 0.8693 | 0.8693 | 0.0% |
+| hybrid + rerank, l2 | 0.8719 | 0.8541 | 0.0% |
+| hybrid, z-score | 0.8694 | 0.8771 | 0.0% |
+| hybrid + rerank, z-score | 0.8756 | 0.8541 | 0.0% |
+| hybrid, RRF (rank 60) | 0.8768 | 0.8828 | 0.0% |
+| hybrid + rerank, RRF (rank 60) | 0.8764 | 0.8541 | 0.0% |
+| hybrid + rerank + parsed filters (shipped) | 0.8208 | 0.8875 | 3.8% |
 
 Lowest nDCG@10 (shipped configuration):
 
@@ -185,8 +185,8 @@ Lowest nDCG@10 (shipped configuration):
 
 | Version | nDCG@10 (shipped path) | MRR | Zero results | BM25 only | Hybrid + rerank | Head / torso / tail |
 |---|---:|---:|---:|---:|---:|---|
-| `products_v1` | 0.8147 | 0.8708 | 3.8% | 0.7103 | 0.8706 | 0.977 / 0.817 / 0.546 |
-| `products_v2` | 0.8147 | 0.8708 | 3.8% | 0.7123 | 0.8723 | 0.977 / 0.817 / 0.546 |
+| `products_v1` | 0.8208 | 0.8875 | 3.8% | 0.7103 | 0.8718 | 0.970 / 0.827 / 0.568 |
+| `products_v2` | 0.8208 | 0.8875 | 3.8% | 0.7123 | 0.8718 | 0.970 / 0.827 / 0.568 |
 
 No query's nDCG@10 moved on `products_v1`.
 

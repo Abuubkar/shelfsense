@@ -3,12 +3,13 @@ import type { SearchItem } from "./api";
 
 export type Stage = { key: string; norm: string | null; label: string; about: string };
 
-// The top 50 (the "head"): keyword and meaning retrieve, the hybrid blends them, the reranker sets the order.
+// The head (the top results, the API's debug.head_size): keyword and meaning retrieve, the hybrid blends them, the
+// reranker sets the order.
 export const HEAD_STAGES: Stage[] = [
   { key: "bm25", norm: "bm25_normalized", label: "Keyword", about: "BM25 word match" },
   { key: "knn", norm: "knn_normalized", label: "Meaning", about: "bge-small embeddings" },
   { key: "hybrid", norm: "hybrid", label: "Hybrid", about: "keyword and meaning, blended" },
-  { key: "rerank", norm: null, label: "Reranker", about: "bge-reranker-base" },
+  { key: "rerank", norm: null, label: "Reranker", about: "ms-marco-MiniLM-L-6-v2" },
 ];
 // Below the top 50 (the "tail"): ordered by the plain sum of the two retrieval scores, not reranked.
 export const TAIL_STAGES: Stage[] = [

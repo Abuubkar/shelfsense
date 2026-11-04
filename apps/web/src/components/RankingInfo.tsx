@@ -5,15 +5,17 @@ import { formatScore, ranksAt, share, stagesFor, tiesAt } from "@/lib/ranking";
 // After Algolia's Ranking Info: the stages in pipeline order, the one that set the order marked, and the results
 // either side of the product with the score that put it between them.
 
-type Props = { item: SearchItem; items: SearchItem[]; weights: [number, number]; hrefFor: (id: string) => string };
+type Props = {
+  item: SearchItem; items: SearchItem[]; weights: [number, number]; headSize: number; hrefFor: (id: string) => string;
+};
 
-export function RankingInfo({ item, items, weights, hrefFor }: Props) {
+export function RankingInfo({ item, items, weights, headSize, hrefFor }: Props) {
   const head = item.debug?.stage === "head";
   const stages = stagesFor(item);
   const decider = stages.at(-1)!;
   const scores = item.debug?.scores ?? {};
   const pct = (w: number) => `${Math.round(w * 100)}%`;
-  // Model names keep their hyphens on one line ("bge-reranker-base" never wraps after "bge-").
+  // Model names keep their hyphens on one line ("ms-marco-MiniLM-L-6-v2" never wraps after "ms-").
   const about = (key: string, text: string) =>
     key === "hybrid" ? `${pct(weights[0])} keyword, ${pct(weights[1])} meaning` : text.replaceAll("-", "‑");
   const byRank = new Map(items.map((i) => [i.rank, i]));
@@ -23,8 +25,8 @@ export function RankingInfo({ item, items, weights, hrefFor }: Props) {
     <div className="ranking">
       <p className="lead">
         <strong>#{item.rank} in these results.</strong>{" "}
-        {head ? "The reranker set its place among the top 50."
-          : "Below the top 50, the combined keyword and meaning score sets the order; the reranker doesn’t run."}
+        {head ? `The reranker set its place among the top ${headSize}.`
+          : `Below the top ${headSize}, the combined keyword and meaning score sets the order; the reranker doesn’t run.`}
       </p>
 
       <table className="stages">
