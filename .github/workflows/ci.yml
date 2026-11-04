@@ -282,6 +282,10 @@ jobs:
           curl -fs -X POST localhost:9201/products/_refresh > /dev/null
       - name: Start the API
         if: steps.changes.outputs.run == 'true'
+        env:
+          # Measured on this runner (4 vCPUs, OpenSearch on the same machine): search p95 72 ms with one reranker
+          # thread against 116 ms with onnxruntime's default, whose threads contend with OpenSearch's (ADR 0021).
+          RERANK_THREADS: "1"
         run: |
           nohup uv run uvicorn shelfsense_api.main:app --port 8020 > api.log 2>&1 &
           for _ in $(seq 1 60); do curl -fs localhost:8020/docs > /dev/null && exit 0; sleep 1; done
