@@ -413,3 +413,42 @@ What each slice ran into: the problem, what we did, why, and the alternatives.
 - **What we did.** A parity query passes when its exact title is in the top 10, its own product or not. 50 of 50
   passed.
 
+
+## Slice 8
+
+### The botocore instrumentation didn't trace aioboto3
+
+- **Problem.** With `BotocoreInstrumentor` on, SQS sends showed only aiohttp `POST` spans. The package gained
+  aiobotocore support in 2026, but as a separate `AiobotocoreInstrumentor`; `BotocoreInstrumentor` patches
+  synchronous botocore only, and Shelfsense talks to SQS and S3 through aioboto3.
+- **What we did.** `setup_telemetry` uses `AiobotocoreInstrumentor`. Neither propagates trace context through SQS
+  (the SQS extension only records queue and message ID, checked in its source), so `aws.send` and
+  `queue._process` carry `traceparent` in message attributes themselves.
+
+### Finding one product's index trace
+
+- **Problem.** The index worker's consumer span links back to the enrich trace's send span, but a link isn't
+  searchable in Jaeger, and a query for the index worker's traces without an operation name returned 100 traces
+  of which the linked one wasn't always part (chaos alone makes ~50 index messages, plus proxy spans).
+- **What we did.** `trace_tree.py --product` reads the queue from the send span and asks for exactly
+  `process <queue>`, then matches the link. Found every time since.
+
+### Telemetry the plan asked for that GitHub runners and tests must not pay for
+
+- **Problem.** Instrumenting every process risked slowing tests, evals and CI, and sending to a collector that
+  isn't there.
+- **What we did.** `setup_telemetry` only sets up JSON logging unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set; the
+  tracer and meter calls in the code are then no-ops. The perf-smoke latency is unaffected.
+
+### A degraded-parse log line printed shoppers' queries
+
+- **Problem.** `query.understand` logged `query parse degraded for 'waterproof red boots…'`. With logs shipped to
+  Loki, every degraded query would have left the process as text.
+- **What we did.** It logs the query's hash and the error code. Span attributes go through the hashing processor;
+  log lines don't, so the rule in CLAUDE.md covers both.
+
+### opensearch-py logs every request at INFO
+
+- **Problem.** With JSON logging on, every search wrote two or three `POST http://…/products/_search` lines, and
+  through the OTLP log handler they'd all reach Loki.
+- **What we did.** The `opensearch` logger is at WARNING, like `httpx` (Ledgerline's lesson).

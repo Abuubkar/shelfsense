@@ -97,7 +97,7 @@ class OllamaUp:
 
     def __init__(self) -> None:
         self.up, self.checked = 0, 0.0
-        _meter.create_observable_gauge("shelfsense.ollama.up", [self._observe], "1", "Whether Ollama answers")
+        _meter.create_observable_gauge("shelfsense.ollama.up", [self._observe], "", "Whether Ollama answers (1 or 0)")
 
     def _observe(self, _: CallbackOptions) -> list[Observation]:
         return [Observation(self.up)]

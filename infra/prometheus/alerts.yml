@@ -1,0 +1,101 @@
+# Alert rules (docs/slo.md). Every alert links its runbook in docs/runbooks/. Gauges are read with
+# last_over_time(...[1m]): OTLP leaves no staleness marker, so a stopped process's last value lingers 5 minutes.
+groups:
+  - name: shelfsense-alerts
+    rules:
+      - alert: DLQDepthHigh
+        expr: max by (queue) (last_over_time(shelfsense_queue_depth{queue=~".*-dlq"}[1m])) > 100
+        for: 5m
+        labels: {severity: page}
+        annotations:
+          summary: More than 100 messages in {{ $labels.queue }}
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/dlq-depth.md
+      - alert: EnrichQueueStale
+        expr: (sum(rate(shelfsense_queue_message_age_seconds_count{queue="enrich"}[15m])) - sum(rate(shelfsense_queue_message_age_seconds_bucket{queue="enrich", le="21600"}[15m]))) > 0 or (max(last_over_time(shelfsense_queue_depth{queue="enrich"}[1m])) > 0 and sum(increase(shelfsense_queue_message_age_seconds_count{queue="enrich"}[6h])) == 0)
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: Enrich messages are waiting more than 6 hours
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/enrich-queue-stale.md
+      - alert: ProductsPerHourLow
+        expr: shelfsense:products_enriched_per_hour < 0.5 * avg_over_time(shelfsense:products_enriched_per_hour[24h]) and avg_over_time(shelfsense:products_enriched_per_hour[24h]) > 0 and sum(last_over_time(shelfsense_queue_depth{queue="enrich"}[1m])) > 0
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: Products enriched per hour is under half its 24-hour average while work is queued
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/products-per-hour-low.md
+      - alert: OllamaUnreachable
+        expr: max(last_over_time(shelfsense_ollama_up[1m])) == 0
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: Ollama hasn't answered for 2 minutes
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/ollama-unreachable.md
+      - alert: UngroundedRateHigh
+        expr: shelfsense:ungrounded_ratio:rate1h > 0.06
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: More than 6% of extracted attributes didn't ground in the listing
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/ungrounded-rate-high.md
+      - alert: ZeroResultRateHigh
+        expr: shelfsense:zero_result_ratio:rate5m > 0.04
+        for: 30m
+        labels: {severity: ticket}
+        annotations:
+          summary: More than 4% of searches found nothing for 30 minutes
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/zero-result-rate-high.md
+      - alert: FastPathSearchSlow
+        expr: shelfsense:fastpath_p95_seconds:rate5m > 0.15
+        for: 10m
+        labels: {severity: page}
+        annotations:
+          summary: Fast-path search p95 over 150 ms for 10 minutes
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/fast-path-slow.md
+  - name: shelfsense-slo-burn
+    rules:
+      # Error budget 0.05. Fast burn: 2% of a 30-day budget in an hour (14.4x); slow: 5% in 6 hours (6x).
+      - alert: CatalogFreshnessFastBurn
+        expr: shelfsense:freshness_late_ratio:rate1h > (14.4 * 0.05) and shelfsense:freshness_late_ratio:rate5m > (14.4 * 0.05)
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: Products arriving in search late fast enough to spend the 30-day error budget in about 2 days
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/catalog-freshness-burn.md
+      - alert: CatalogFreshnessSlowBurn
+        expr: shelfsense:freshness_late_ratio:rate6h > (6 * 0.05) and shelfsense:freshness_late_ratio:rate30m > (6 * 0.05)
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: Products arriving in search late steadily; at this rate the 30-day budget lasts about 5 days
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/catalog-freshness-burn.md
+      # Error budget 0.001. Fast burn: 2% of a 30-day budget in an hour (14.4x); slow: 5% in 6 hours (6x).
+      - alert: SearchAvailabilityFastBurn
+        expr: shelfsense:search_errors_ratio:rate1h > (14.4 * 0.001) and shelfsense:search_errors_ratio:rate5m > (14.4 * 0.001)
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: API requests failing fast enough to spend the 30-day error budget in about 2 days
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/search-availability-burn.md
+      - alert: SearchAvailabilitySlowBurn
+        expr: shelfsense:search_errors_ratio:rate6h > (6 * 0.001) and shelfsense:search_errors_ratio:rate30m > (6 * 0.001)
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: API requests failing steadily; at this rate the 30-day budget lasts about 5 days
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/search-availability-burn.md
+      # Error budget 0.05. Fast burn: 2% of a 30-day budget in an hour (14.4x); slow: 5% in 6 hours (6x).
+      - alert: FastPathLatencyFastBurn
+        expr: shelfsense:fastpath_slow_ratio:rate1h > (14.4 * 0.05) and shelfsense:fastpath_slow_ratio:rate5m > (14.4 * 0.05)
+        for: 2m
+        labels: {severity: page}
+        annotations:
+          summary: Fast-path searches over 150 ms fast enough to spend the 30-day error budget in about 2 days
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/fast-path-latency-burn.md
+      - alert: FastPathLatencySlowBurn
+        expr: shelfsense:fastpath_slow_ratio:rate6h > (6 * 0.05) and shelfsense:fastpath_slow_ratio:rate30m > (6 * 0.05)
+        for: 15m
+        labels: {severity: ticket}
+        annotations:
+          summary: Fast-path searches over 150 ms steadily; at this rate the 30-day budget lasts about 5 days
+          runbook_url: https://github.com/Abuubkar/shelfsense/blob/main/docs/runbooks/fast-path-latency-burn.md

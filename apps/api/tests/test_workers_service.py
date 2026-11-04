@@ -125,13 +125,13 @@ async def test_redelivery_after_a_crash_midway_only_enriches_what_wasnt_written(
     await aws.send(sqs, settings.enrich_queue, [EnrichRequest(product_ids=ids).model_dump_json()])
     calls = {"first": 0, "second": 0}
 
-    async def crashes_after_25(system: str, user: str, schema: dict[str, Any], follow_up: Any = None) -> ModelReply:
+    async def crashes_after_25(system: str, user: str, schema: dict[str, Any], follow_up: Any = None, **_: Any) -> ModelReply:
         calls["first"] += 1
         if calls["first"] > 25:
             await asyncio.Event().wait()  # stuck here when the worker dies
         return reply(first_candidate(schema))
 
-    async def healthy(system: str, user: str, schema: dict[str, Any], follow_up: Any = None) -> ModelReply:
+    async def healthy(system: str, user: str, schema: dict[str, Any], follow_up: Any = None, **_: Any) -> ModelReply:
         calls["second"] += 1
         return reply(first_candidate(schema))
 
@@ -176,7 +176,7 @@ async def test_permanent_failure_is_dead_lettered_alone_and_redrive_moves_it_bac
     sqs, supplier_id = stack
     bad, good = await add_products(supplier_id, 2)
 
-    async def rejects_product_0(system: str, user: str, schema: dict[str, Any], follow_up: Any = None) -> ModelReply:
+    async def rejects_product_0(system: str, user: str, schema: dict[str, Any], follow_up: Any = None, **_: Any) -> ModelReply:
         # Product 0 gets an answer outside its candidates every time, retry included.
         return reply("999999" if "Test product 0" in user else first_candidate(schema))
 

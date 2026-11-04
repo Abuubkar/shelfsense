@@ -1,0 +1,43 @@
+# Recording rules (docs/slo.md): the pipeline rate the alerts compare against, and each SLO's bad-event ratio
+# over the burn-rate windows. Hand-maintained; metric names are what the collector exports (docs/adr/0022).
+groups:
+  - name: shelfsense-pipeline
+    rules:
+      # Products enriched per hour, from the last 15 minutes' rate.
+      - record: shelfsense:products_enriched_per_hour
+        expr: sum(rate(shelfsense_enrich_items_total{outcome="done"}[15m])) * 3600
+      - record: shelfsense:ungrounded_ratio:rate1h
+        expr: sum(rate(shelfsense_attributes_extracted_total{result="ungrounded"}[1h])) / sum(rate(shelfsense_attributes_extracted_total[1h]))
+      - record: shelfsense:zero_result_ratio:rate5m
+        expr: sum(rate(shelfsense_search_requests_total{results="none"}[5m])) / sum(rate(shelfsense_search_requests_total[5m]))
+      - record: shelfsense:fastpath_p95_seconds:rate5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(shelfsense_search_duration_seconds_bucket{path="rules"}[5m])))
+  - name: shelfsense-slo
+    rules:
+      # Share of products indexed more than 2 h after their last change.
+      - record: shelfsense:freshness_late_ratio:rate5m
+        expr: 1 - sum(rate(shelfsense_catalog_freshness_seconds_bucket{le="7200"}[5m])) / sum(rate(shelfsense_catalog_freshness_seconds_count[5m]))
+      - record: shelfsense:freshness_late_ratio:rate30m
+        expr: 1 - sum(rate(shelfsense_catalog_freshness_seconds_bucket{le="7200"}[30m])) / sum(rate(shelfsense_catalog_freshness_seconds_count[30m]))
+      - record: shelfsense:freshness_late_ratio:rate1h
+        expr: 1 - sum(rate(shelfsense_catalog_freshness_seconds_bucket{le="7200"}[1h])) / sum(rate(shelfsense_catalog_freshness_seconds_count[1h]))
+      - record: shelfsense:freshness_late_ratio:rate6h
+        expr: 1 - sum(rate(shelfsense_catalog_freshness_seconds_bucket{le="7200"}[6h])) / sum(rate(shelfsense_catalog_freshness_seconds_count[6h]))
+      # Share of API requests that failed (5xx).
+      - record: shelfsense:search_errors_ratio:rate5m
+        expr: sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER", status_code="STATUS_CODE_ERROR"}[5m])) / sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER"}[5m]))
+      - record: shelfsense:search_errors_ratio:rate30m
+        expr: sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER", status_code="STATUS_CODE_ERROR"}[30m])) / sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER"}[30m]))
+      - record: shelfsense:search_errors_ratio:rate1h
+        expr: sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER", status_code="STATUS_CODE_ERROR"}[1h])) / sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER"}[1h]))
+      - record: shelfsense:search_errors_ratio:rate6h
+        expr: sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER", status_code="STATUS_CODE_ERROR"}[6h])) / sum(rate(traces_span_metrics_calls_total{service_name="shelfsense-api", span_kind="SPAN_KIND_SERVER"}[6h]))
+      # Share of first-page fast-path searches slower than 150 ms.
+      - record: shelfsense:fastpath_slow_ratio:rate5m
+        expr: 1 - sum(rate(shelfsense_search_duration_seconds_bucket{path="rules", le="0.15"}[5m])) / sum(rate(shelfsense_search_duration_seconds_count{path="rules"}[5m]))
+      - record: shelfsense:fastpath_slow_ratio:rate30m
+        expr: 1 - sum(rate(shelfsense_search_duration_seconds_bucket{path="rules", le="0.15"}[30m])) / sum(rate(shelfsense_search_duration_seconds_count{path="rules"}[30m]))
+      - record: shelfsense:fastpath_slow_ratio:rate1h
+        expr: 1 - sum(rate(shelfsense_search_duration_seconds_bucket{path="rules", le="0.15"}[1h])) / sum(rate(shelfsense_search_duration_seconds_count{path="rules"}[1h]))
+      - record: shelfsense:fastpath_slow_ratio:rate6h
+        expr: 1 - sum(rate(shelfsense_search_duration_seconds_bucket{path="rules", le="0.15"}[6h])) / sum(rate(shelfsense_search_duration_seconds_count{path="rules"}[6h]))

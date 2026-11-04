@@ -113,9 +113,10 @@ def setup_logging(level: int = logging.INFO) -> None:
     root = logging.getLogger()
     root.handlers = [h for h in root.handlers if not isinstance(h, logging.StreamHandler)] + [handler]
     root.setLevel(level)
-    # httpx logs every request at INFO, URL included (Ollama's, every model call): noise, and a URL can carry a
-    # query string. Its warnings and errors still come through.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # httpx and opensearch-py log every request at INFO, URL included (each model call, each search): noise, and a
+    # URL can carry a query string. Their warnings and errors still come through.
+    for name in ("httpx", "opensearch"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 def setup_telemetry(service_name: str, *, fastapi_app: Any = None, sqlalchemy_engines: Iterable[Any] = ()) -> bool:
@@ -129,7 +130,7 @@ def setup_telemetry(service_name: str, *, fastapi_app: Any = None, sqlalchemy_en
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
-    from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
+    from opentelemetry.instrumentation.botocore import AiobotocoreInstrumentor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry.instrumentation.redis import RedisInstrumentor
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
@@ -164,7 +165,7 @@ def setup_telemetry(service_name: str, *, fastapi_app: Any = None, sqlalchemy_en
     HTTPXClientInstrumentor().instrument()  # Ollama's client
     AioHttpClientInstrumentor().instrument()  # opensearch-py's transport
     RedisInstrumentor().instrument()
-    BotocoreInstrumentor().instrument()  # SQS and S3, through aiobotocore
+    AiobotocoreInstrumentor().instrument()  # SQS and S3 (aioboto3; BotocoreInstrumentor covers sync botocore only)
     if fastapi_app is not None:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         # No spans for each ASGI receive/send chunk: noise next to the request span.
