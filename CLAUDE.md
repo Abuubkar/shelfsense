@@ -77,7 +77,7 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - REST routes and GraphQL resolvers both call `service.py`; business rules never live in a route or resolver.
   Errors are raised as `schemas.ApiProblem` with a code from `ProblemCode` (documented in docs/problems.md).
 - Pagination is cursor-only, through `cursor.py` (signed, bound to the query). No offsets anywhere.
-- Search (ADR 0006): the result set is lexical OR radial k-NN after filters; the head (50) is hybrid + rerank, the
+- Search (ADR 0006): the result set is lexical OR radial k-NN after filters; the head (10) is hybrid + rerank, the
   tail is `search_after` on the same PIT excluding the head. Every query of one search reads its PIT, and a PIT
   sort always ends with the `product_id` tiebreaker. Don't store the head in the cursor; re-run it on the PIT.
 - OpenSearch is derived data: change or remove a field with a new index version in `search.TEMPLATES`, built and
@@ -88,7 +88,7 @@ make contract-check                          # oasdiff: the code's spec vs contr
 - Query understanding goes through `query.understand` (rules fast path, Redis cache, small model under
   `QUERY_TIMEOUT_S`, degrade on any failure) and never raises. Page 1's parse travels in the cursor; never
   re-parse on later pages (ADR 0014).
-- Embedding and reranking go through `embeddings.py` (bge-small, bge-reranker-base); never load a fastembed model
+- Embedding and reranking go through `embeddings.py` (bge-small, ms-marco-MiniLM-L-6-v2); never load a fastembed model
   elsewhere.
 - Feed rejections use spreadsheet row numbers (header = row 1), counted per CSV record, not per line.
 - Committing a feed again must change nothing: products upsert only on a changed content hash, rejections are
