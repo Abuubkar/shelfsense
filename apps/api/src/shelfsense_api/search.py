@@ -306,29 +306,36 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
     position: dict[str, Any] = (cursor.decode(after, scope, settings.cursor_secret) if after
                                 else {"rank": 0, "after": None})
 
+    # Independent steps overlap: the PIT is opened while the query is embedded, facets count while the page is
+    # built, and the tail is fetched while the head is reranked (it needs the head's IDs, not their order).
     started = time.perf_counter()
-    vector = await asyncio.to_thread(embed_query, q) if q else None
-    timings["embed"] = _ms(started)
+    embedding = asyncio.create_task(asyncio.to_thread(embed_query, q)) if q else None
 
     try:
         pit = position.get("pit") or (await os.create_pit(
             index=index, params={"keep_alive": settings.search_cursor_ttl}))["pit_id"]
+        vector = await embedding if embedding else None
+        timings["embed"] = _ms(started)
         facets_task = asyncio.create_task(_facets(os, pit, q, vector, filters))
         rank = position["rank"]
         # Reranking only matters for pages that show head products; later pages need just the head's IDs.
-        head = await _head(os, pit, q, vector, filters, rank < HEAD_SIZE, debug, timings, pipeline) if q else []
-        items = head[rank : rank + page_size]
+        reranked = rank < HEAD_SIZE
+        raw = await _hybrid_head(os, pit, q, vector, filters, reranked, debug, timings, pipeline) if q else []
+        ordering = asyncio.create_task(_order_head(raw, q, reranked, debug and reranked, timings))
+        shown = len(raw[rank : rank + page_size])
 
-        more = rank + len(items) < len(head)
+        more = rank + shown < len(raw)
+        tail: list[Hit] = []
         if not more:
-            remaining = page_size - len(items)
+            remaining = page_size - shown
             started = time.perf_counter()
             # One extra hit tells whether another page exists, so the last page is never an empty one.
-            tail = await _tail(os, pit, q, vector, filters, [h.product_id for h in head], position["after"],
-                               remaining + 1, debug, start_rank=max(rank, len(head)) + 1)
+            tail = await _tail(os, pit, q, vector, filters, [h["_id"] for h in raw], position["after"],
+                               remaining + 1, debug, start_rank=max(rank, len(raw)) + 1)
             timings["tail"] = _ms(started)
             more = len(tail) > remaining
-            items += tail[:remaining]
+            tail = tail[:remaining]
+        items = (await ordering)[rank : rank + page_size] + tail
         total, facets = await facets_task
     except NotFoundError as exc:
         raise CursorExpired("the search cursor expired; start the search again") from exc
@@ -346,9 +353,10 @@ async def search(os: AsyncOpenSearch, q: str, filters: Filters, page_size: int, 
     return SearchPage(items, cursors, total, facets, cursors[-1] if more and cursors else None, timings)
 
 
-async def _head(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | None, filters: Filters,
-                reranked: bool, debug: bool, timings: dict[str, int], pipeline: str = PIPELINE) -> list[Hit]:
-    """The first HEAD_SIZE products by hybrid score, reranked by the cross-encoder when `reranked`."""
+async def _hybrid_head(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | None, filters: Filters,
+                       reranked: bool, debug: bool, timings: dict[str, int], pipeline: str = PIPELINE) -> list[dict]:
+    """The first HEAD_SIZE products by hybrid score, as OpenSearch returns them (with their text when they'll be
+    reranked)."""
     hybrid: dict[str, Any] = {"queries": [lexical_query(q), semantic_query(vector or [])]}
     if clauses := filter_clauses(filters):
         hybrid["filter"] = {"bool": {"filter": clauses}}
@@ -359,7 +367,11 @@ async def _head(os: AsyncOpenSearch, pit: str, q: str, vector: list[float] | Non
                                      "query": {"hybrid": hybrid},
                                      "pit": {"id": pit, "keep_alive": settings.search_cursor_ttl}}, params=params)
     timings["hybrid"] = _ms(started)
-    raw = response["hits"]["hits"]
+    return response["hits"]["hits"]
+
+
+async def _order_head(raw: list[dict], q: str, reranked: bool, explain: bool, timings: dict[str, int]) -> list[Hit]:
+    """The head in its final order: reranked by the cross-encoder when `reranked`, else as the hybrid ranked it."""
     if not reranked:
         return [Hit(h["_id"], {}, "head", n) for n, h in enumerate(raw, start=1)]
 
